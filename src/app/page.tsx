@@ -66,20 +66,16 @@ export default function HomePage() {
     setPlanning(true);
     setError("");
     try {
-      const result = await apiFetch<{ tripId: string | null; message: string; state: string; pendingMemoryCount: number }>(
-        "/api/agent/messages",
+      const result = await apiFetch<{ sessionId: string; tripId: string | null; messages: unknown[]; pendingMemoryCount: number }>(
+        "/api/agent/sessions",
         {
           method: "POST",
           body: JSON.stringify({ text: input, source: "web" })
         }
       );
       setPendingCount(result.pendingMemoryCount);
-      if (result.tripId) {
-        window.localStorage.removeItem("commute-draft");
-        window.location.href = `/trips/${result.tripId}`;
-      } else {
-        setError(result.message);
-      }
+      window.localStorage.removeItem("commute-draft");
+      window.location.href = `/agent/sessions/${result.sessionId}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "规划失败");
     } finally {

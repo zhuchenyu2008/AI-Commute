@@ -22,6 +22,7 @@ type Trip = {
   segments: Array<{ id: string; mode: string; title: string; detail: string; minutes: number }>;
   reminderJobs: Array<{ id: string; offsetMinutes: number; status: string; scheduledAt: string }>;
   routeOptions: Array<{ planKey: string; title: string; totalMinutes: number; latestDepartLocal: string; isChosen: boolean }>;
+  agentSessions?: Array<{ id: string; title: string; status: string }>;
 };
 
 export default function TripDetailPage() {
@@ -71,6 +72,7 @@ function TripDetailContent() {
   const segments = trip.segments || [];
   const reminderJobs = trip.reminderJobs || [];
   const chosenRoute = routeOptions.find((item) => item.isChosen);
+  const agentSessionId = trip.agentSessions?.[0]?.id;
 
   return (
     <AppShell showBottomNav={false}>
@@ -119,6 +121,16 @@ function TripDetailContent() {
             }}
           />
         </GlassCard>
+      </section>
+
+      <section className="px-5 py-2">
+        <Link
+          href={agentSessionId ? `/agent/sessions/${agentSessionId}` : `/agent/sessions/new?tripId=${trip.id}`}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary-container)] py-4 text-base font-extrabold text-white shadow-lg shadow-blue-500/20"
+        >
+          和 Agent 聊这趟行程
+          <Icon name="chat" className="text-[20px]" />
+        </Link>
       </section>
 
       <section className="px-5 py-4">

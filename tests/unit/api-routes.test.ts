@@ -9,8 +9,21 @@ const prismaMock = vi.hoisted(() => ({
   },
   profile: {
     update: vi.fn()
+  },
+  agentSession: {
+    create: vi.fn(),
+    findUnique: vi.fn()
+  },
+  agentMessage: {
+    create: vi.fn(),
+    findMany: vi.fn()
+  },
+  agentToolCall: {
+    findMany: vi.fn()
   }
 }));
+
+const runAgentSessionTurnMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/db", () => ({
   prisma: prismaMock
@@ -18,6 +31,10 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/auth/api-guard", () => ({
   withAuth: (handler: () => Promise<Response>) => handler()
+}));
+
+vi.mock("@/lib/agent/session-service", () => ({
+  runAgentSessionTurn: runAgentSessionTurnMock
 }));
 
 describe("trip cancel route", () => {
@@ -109,5 +126,69 @@ describe("profile route", () => {
         routePreferenceJson: undefined
       }
     });
+  });
+});
+
+describe("agent session routes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("creates an agent session and runs the first agent turn", async () => {
+    runAgentSessionTurnMock.mockResolvedValue({
+      session: { id: "session-1", tripId: "trip-1", status: "active", title: "龙湖天街" },
+      messages: [
+        { id: "msg-user", role: "user", content: "明天 9:15 到龙湖天街", metadata: {} },
+        { id: "msg-agent", role: "assistant", content: "已经安排好。", metadata: {} }
+      ],
+      toolCalls: [{ id: "call-1", toolName: "create_trip", status: "done", reason: "创建行程" }],
+      tripId: "trip-1"
+    });
+
+    const { POST } = await import("@/app/api/agent/sessions/route");
+    const response = await POST(
+      new Request("http://localhost/api/agent/sessions", {
+        method: "POST",
+        body: JSON.stringify({ text: "明天 9:15 到龙湖天街" })
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(runAgentSessionTurnMock).toHaveBeenCalledWith({ text: "明天 9:15 到龙湖天街" });
+    expect(body.sessionId).toBe("session-1");
+    expect(body.tripId).toBe("trip-1");
+    expect(body.messages).toHaveLength(2);
+    expect(body.toolCalls[0].toolName).toBe("create_trip");
+  });
+
+  it("keeps the legacy agent messages route compatible", async () => {
+    runAgentSessionTurnMock.mockResolvedValue({
+      session: { id: "session-1", tripId: "trip-1", status: "active", title: "龙湖天街" },
+      messages: [{ id: "msg-agent", role: "assistant", content: "最晚 08:30 出发。", metadata: {} }],
+      toolCalls: [],
+      tripId: "trip-1",
+      pendingMemoryCount: 0
+    });
+
+    const { POST } = await import("@/app/api/agent/messages/route");
+    const response = await POST(
+      new Request("http://localhost/api/agent/messages", {
+        method: "POST",
+        body: JSON.stringify({ text: "明天 9:15 到龙湖天街" })
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual(
+      expect.objectContaining({
+        message: "最晚 08:30 出发。",
+        tripId: "trip-1",
+        sessionId: "session-1",
+        pendingMemoryCount: 0,
+        state: "planned"
+      })
+    );
   });
 });

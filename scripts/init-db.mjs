@@ -74,31 +74,77 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS "ReminderJob" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "tripId" TEXT NOT NULL,
+    "agentSessionId" TEXT,
     "kind" TEXT NOT NULL,
     "scheduledAt" DATETIME NOT NULL,
     "offsetMinutes" INTEGER NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending',
     "lastError" TEXT,
+    "payloadJson" TEXT NOT NULL DEFAULT '{}',
+    "reason" TEXT,
     "ranAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ReminderJob_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "Trip" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT "ReminderJob_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "Trip" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "ReminderJob_agentSessionId_fkey" FOREIGN KEY ("agentSessionId") REFERENCES "AgentSession" ("id") ON DELETE SET NULL ON UPDATE CASCADE
   )`,
   `CREATE INDEX IF NOT EXISTS "ReminderJob_status_scheduledAt_idx" ON "ReminderJob"("status", "scheduledAt")`,
   `CREATE INDEX IF NOT EXISTS "ReminderJob_tripId_idx" ON "ReminderJob"("tripId")`,
+  `CREATE INDEX IF NOT EXISTS "ReminderJob_agentSessionId_idx" ON "ReminderJob"("agentSessionId")`,
   `CREATE TABLE IF NOT EXISTS "Memory" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "agentSessionId" TEXT,
     "type" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'confirmed',
     "label" TEXT NOT NULL,
     "valueJson" TEXT NOT NULL DEFAULT '{}',
+    "metadataJson" TEXT NOT NULL DEFAULT '{}',
     "sourceText" TEXT,
     "confidence" REAL,
     "deletedAt" DATETIME,
     "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "Memory_agentSessionId_fkey" FOREIGN KEY ("agentSessionId") REFERENCES "AgentSession" ("id") ON DELETE SET NULL ON UPDATE CASCADE
   )`,
   `CREATE INDEX IF NOT EXISTS "Memory_type_status_idx" ON "Memory"("type", "status")`,
+  `CREATE INDEX IF NOT EXISTS "Memory_agentSessionId_idx" ON "Memory"("agentSessionId")`,
+  `CREATE TABLE IF NOT EXISTS "AgentSession" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "title" TEXT NOT NULL DEFAULT 'Agent session',
+    "tripId" TEXT,
+    "metadataJson" TEXT NOT NULL DEFAULT '{}',
+    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "AgentSession_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "Trip" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "AgentSession_tripId_idx" ON "AgentSession"("tripId")`,
+  `CREATE INDEX IF NOT EXISTS "AgentSession_status_updatedAt_idx" ON "AgentSession"("status", "updatedAt")`,
+  `CREATE TABLE IF NOT EXISTS "AgentMessage" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "sessionId" TEXT NOT NULL,
+    "role" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "metadataJson" TEXT NOT NULL DEFAULT '{}',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "AgentMessage_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "AgentSession" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "AgentMessage_sessionId_createdAt_idx" ON "AgentMessage"("sessionId", "createdAt")`,
+  `CREATE TABLE IF NOT EXISTS "AgentToolCall" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "sessionId" TEXT NOT NULL,
+    "messageId" TEXT,
+    "toolName" TEXT NOT NULL,
+    "argumentsJson" TEXT NOT NULL DEFAULT '{}',
+    "resultJson" TEXT NOT NULL DEFAULT '{}',
+    "status" TEXT NOT NULL DEFAULT 'done',
+    "reason" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "AgentToolCall_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "AgentSession" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "AgentToolCall_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "AgentMessage" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "AgentToolCall_sessionId_createdAt_idx" ON "AgentToolCall"("sessionId", "createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "AgentToolCall_messageId_idx" ON "AgentToolCall"("messageId")`,
   `CREATE TABLE IF NOT EXISTS "AppSetting" (
     "key" TEXT NOT NULL PRIMARY KEY,
     "value" TEXT NOT NULL,
@@ -126,6 +172,7 @@ async function main() {
   for (const statement of statements) {
     await prisma.$executeRawUnsafe(statement);
   }
+  await ensureCompatibilityColumns();
   await seed();
 }
 
@@ -193,6 +240,22 @@ async function seed() {
       })
     }
   });
+}
+
+async function ensureCompatibilityColumns() {
+  await addColumnIfMissing("ReminderJob", "agentSessionId", "TEXT");
+  await addColumnIfMissing("ReminderJob", "payloadJson", "TEXT NOT NULL DEFAULT '{}'");
+  await addColumnIfMissing("ReminderJob", "reason", "TEXT");
+  await addColumnIfMissing("Memory", "agentSessionId", "TEXT");
+  await addColumnIfMissing("Memory", "metadataJson", "TEXT NOT NULL DEFAULT '{}'");
+}
+
+async function addColumnIfMissing(table, column, definition) {
+  const columns = await prisma.$queryRawUnsafe(`PRAGMA table_info("${table}")`);
+  if (columns.some((item) => item.name === column)) {
+    return;
+  }
+  await prisma.$executeRawUnsafe(`ALTER TABLE "${table}" ADD COLUMN "${column}" ${definition}`);
 }
 
 main()

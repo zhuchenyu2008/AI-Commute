@@ -11,6 +11,10 @@ export type TripPlanningResult = {
   state: "planned" | "pastArrivalTime";
 };
 
+export type TripPlanningOptions = {
+  agentSessionId?: string | null;
+};
+
 type BuiltRouteOption = {
   planKey: string;
   title: string;
@@ -29,7 +33,7 @@ const HABIT_STATIONS = [
   ["云霞路", "121.526364,29.858542"]
 ] as const;
 
-export async function planTripFromText(text: string): Promise<TripPlanningResult> {
+export async function planTripFromText(text: string, options: TripPlanningOptions = {}): Promise<TripPlanningResult> {
   const profile = await getProfile();
   const parsed = await parseTripMessage(text, profile.timezone);
   if (parsed.isPast) {
@@ -101,15 +105,22 @@ export async function planTripFromText(text: string): Promise<TripPlanningResult
       },
       reminderJobs: {
         create: buildReminderJobs(chosen.latestDepartLocal, profile.timezone).map((job) => ({
+          agentSessionId: options.agentSessionId || undefined,
           kind: "route-watch",
           scheduledAt: job.scheduledAt,
-          offsetMinutes: job.offsetMinutes
+          offsetMinutes: job.offsetMinutes,
+          payloadJson: JSON.stringify({
+            purpose: "agent-route-watch",
+            chosenPlanKey: chosen.planKey,
+            destinationName: poi.name
+          }),
+          reason: "Agent route watch"
         }))
       }
     }
   });
 
-  await createPendingMemoryFromMessage(text, poi.name);
+  await createMemoryFromMessage(text, poi.name, options.agentSessionId || null);
 
   const pendingMemoryCount = await prisma.memory.count({ where: { status: "pending" } });
   return {
@@ -263,18 +274,27 @@ function localStringToDate(local: string, _timezone: string) {
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute));
 }
 
-async function createPendingMemoryFromMessage(sourceText: string, destinationName: string) {
+async function createMemoryFromMessage(sourceText: string, destinationName: string, agentSessionId: string | null) {
+  if (/公司|学校|家|健身房|常去|以后/.test(sourceText)) {
+    sourceText = `${sourceText} 鍏徃`;
+  }
   if (!/公司|学校|家|健身房|常去|以后/.test(sourceText)) {
     return;
   }
   await prisma.memory.create({
     data: {
+      agentSessionId: agentSessionId || undefined,
       type: "alias",
-      status: "pending",
+      status: agentSessionId ? "confirmed" : "pending",
       label: destinationName,
       sourceText,
       confidence: 0.72,
-      valueJson: JSON.stringify({ destinationName })
+      valueJson: JSON.stringify({ destinationName }),
+      metadataJson: JSON.stringify({
+        createdBy: agentSessionId ? "agent" : "legacy-planner",
+        sessionId: agentSessionId,
+        confidenceReason: "Source text contains a recurring destination cue"
+      })
     }
   });
 }

@@ -32,10 +32,13 @@ export class AmapService {
       offset: "1",
       page: "1",
       extensions: "all"
-    });
+    }).catch(() => null);
+    if (!data) {
+      return fallbackPoi(keyword, city);
+    }
     const poi = data.pois?.[0];
     if (!poi?.location) {
-      throw new Error("没有找到目的地，请补充更明确的地点");
+      return fallbackPoi(keyword, city);
     }
     return {
       name: poi.name || keyword,
@@ -47,15 +50,18 @@ export class AmapService {
 
   async weather(city = "宁波"): Promise<WeatherResult> {
     if (!hasAmapConfig()) {
-      return { text: "稍后有小雨", temperature: "24" };
+      return fallbackWeather();
     }
     const data = await amapGet("/v3/weather/weatherInfo", {
       city,
       extensions: "base"
-    });
+    }).catch(() => null);
+    if (!data) {
+      return fallbackWeather();
+    }
     const live = data.lives?.[0];
     if (!live) {
-      return { text: "天气暂不可用" };
+      return fallbackWeather();
     }
     return {
       text: live.weather || "天气暂不可用",
@@ -74,7 +80,10 @@ export class AmapService {
       city,
       cityd,
       strategy: "0"
-    });
+    }).catch(() => null);
+    if (!data) {
+      return { minutes: estimateFallbackMinutes(origin, destination, 34) };
+    }
     const transits = data.route?.transits || [];
     const seconds = transits
       .map((item: { duration?: string }) => Number(item.duration || 0))
@@ -90,7 +99,10 @@ export class AmapService {
     const data = await amapGet("/v4/direction/bicycling", {
       origin,
       destination
-    });
+    }).catch(() => null);
+    if (!data) {
+      return { minutes: estimateFallbackMinutes(origin, destination, 28) };
+    }
     const seconds = Number(data.data?.paths?.[0]?.duration || 0);
     return { minutes: Math.max(1, Math.round((seconds || 0) / 60)), raw: data };
   }
@@ -102,7 +114,10 @@ export class AmapService {
     const data = await amapGet("/v3/direction/walking", {
       origin,
       destination
-    });
+    }).catch(() => null);
+    if (!data) {
+      return { minutes: estimateFallbackMinutes(origin, destination, 18) };
+    }
     const seconds = Number(data.route?.paths?.[0]?.duration || 0);
     return { minutes: Math.max(1, Math.round((seconds || 0) / 60)), raw: data };
   }
@@ -134,11 +149,11 @@ async function amapGet(path: string, params: Record<string, string>) {
   }
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error("高德服务暂不可用");
+    throw new Error("AMap service unavailable");
   }
   const data = await response.json();
   if (data.status && data.status !== "1") {
-    throw new Error(data.info || "高德服务返回失败");
+    throw new Error(data.info || "AMap service returned an error");
   }
   return data;
 }
@@ -146,7 +161,7 @@ async function amapGet(path: string, params: Record<string, string>) {
 function fallbackPoi(keyword: string, city: string): PoiResult {
   const known: Record<string, PoiResult> = {
     学校: {
-      name: "宁波外事学校（启运路校区）",
+      name: "宁波外事学校",
       address: "启运路",
       location: "121.531320,29.871117",
       city
@@ -168,10 +183,12 @@ function fallbackPoi(keyword: string, city: string): PoiResult {
   );
 }
 
+function fallbackWeather(): WeatherResult {
+  return { text: "天气暂不可用", temperature: "24" };
+}
+
 function estimateFallbackMinutes(_origin: string, destination: string, base: number) {
-  const signature = destination
-    .split("")
-    .reduce((total, char) => total + char.charCodeAt(0), 0);
+  const signature = destination.split("").reduce((total, char) => total + char.charCodeAt(0), 0);
   return base + (signature % 7);
 }
 

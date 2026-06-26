@@ -8,7 +8,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const { id } = await context.params;
     const trip = await prisma.trip.findUnique({
       where: { id },
-      include: { routeOptions: true, segments: true, reminderJobs: true }
+      include: { routeOptions: true, segments: true, reminderJobs: true, agentSessions: true }
     });
     if (!trip || trip.deletedAt) {
       return apiError("NOT_FOUND", "行程不存在", 404);

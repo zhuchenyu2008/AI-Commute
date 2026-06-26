@@ -23,6 +23,8 @@ type Memory = {
   sourceText?: string;
   confidence?: number;
   value?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  agentSessionId?: string | null;
 };
 
 type Status = {
@@ -83,6 +85,11 @@ export default function SettingsPage() {
       body: JSON.stringify({ status: "ignored" })
     });
     setMemories((items) => items.map((item) => (item.id === memory.id ? data.memory : item)));
+  }
+
+  async function deleteMemory(memory: Memory) {
+    await apiFetch<{ ok: boolean }>(`/api/memories/${memory.id}`, { method: "DELETE" });
+    setMemories((items) => items.filter((item) => item.id !== memory.id));
   }
 
   async function testNotification(channel: "telegram" | "email") {
@@ -181,7 +188,13 @@ export default function SettingsPage() {
                   <p className="font-bold">{memory.label}</p>
                   <p className="text-sm text-[var(--on-surface-variant)]">{String(memory.value?.address || memory.value?.name || "已确认地点")}</p>
                 </div>
-                <Icon name="chevron_right" className="text-[var(--outline)]" />
+                <button
+                  onClick={() => deleteMemory(memory)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--error)] hover:bg-red-50"
+                  aria-label={`删除 ${memory.label}`}
+                >
+                  <Icon name="delete" className="text-[20px]" />
+                </button>
               </div>
             ))}
           </div>

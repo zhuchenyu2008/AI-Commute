@@ -49,6 +49,7 @@ model Trip {
   segments                 TripSegment[]
   reminderJobs             ReminderJob[]
   notificationLogs         NotificationLog[]
+  agentSessions            AgentSession[]
 }
 
 model TripRouteOption {
@@ -85,33 +86,90 @@ model TripSegment {
 model ReminderJob {
   id             String    @id @default(cuid())
   tripId         String
+  agentSessionId String?
   kind           String
   scheduledAt    DateTime
   offsetMinutes  Int
   status         String    @default("pending")
   lastError      String?
+  payloadJson    String    @default("{}")
+  reason         String?
   ranAt          DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   trip           Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  agentSession   AgentSession? @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
 
   @@index([status, scheduledAt])
   @@index([tripId])
+  @@index([agentSessionId])
 }
 
 model Memory {
   id              String   @id @default(cuid())
+  agentSessionId  String?
   type            String
   status          String   @default("confirmed")
   label           String
   valueJson       String   @default("{}")
+  metadataJson    String   @default("{}")
   sourceText      String?
   confidence      Float?
   deletedAt       DateTime?
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())
+  agentSession    AgentSession? @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
 
   @@index([type, status])
+  @@index([agentSessionId])
+}
+
+model AgentSession {
+  id           String   @id @default(cuid())
+  status       String   @default("active")
+  title        String   @default("Agent 会话")
+  tripId       String?
+  metadataJson String   @default("{}")
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  trip         Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  messages     AgentMessage[]
+  toolCalls    AgentToolCall[]
+  reminderJobs ReminderJob[]
+  memories     Memory[]
+
+  @@index([tripId])
+  @@index([status, updatedAt])
+}
+
+model AgentMessage {
+  id           String   @id @default(cuid())
+  sessionId    String
+  role         String
+  content      String
+  metadataJson String   @default("{}")
+  createdAt    DateTime @default(now())
+  session      AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  toolCalls    AgentToolCall[]
+
+  @@index([sessionId, createdAt])
+}
+
+model AgentToolCall {
+  id            String   @id @default(cuid())
+  sessionId     String
+  messageId     String?
+  toolName      String
+  argumentsJson String   @default("{}")
+  resultJson    String   @default("{}")
+  status        String   @default("done")
+  reason        String?
+  createdAt     DateTime @default(now())
+  session       AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  message       AgentMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt])
+  @@index([messageId])
 }
 
 model AppSetting {

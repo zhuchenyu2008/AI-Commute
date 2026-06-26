@@ -8,7 +8,7 @@ export async function GET() {
     const trip = await prisma.trip.findFirst({
       where: { status: { in: ["active", "scheduled"] }, deletedAt: null },
       orderBy: { createdAt: "desc" },
-      include: { routeOptions: true, segments: true, reminderJobs: true }
+      include: { routeOptions: true, segments: true, reminderJobs: true, agentSessions: true }
     });
     return apiOk({ trip: trip ? serializeTrip(trip) : null });
   });

@@ -9,10 +9,22 @@ type JsonBackedTrip = {
 
 type JsonBackedMemory = {
   valueJson: string;
+  metadataJson?: string;
   [key: string]: unknown;
 };
 
-export function serializeTrip(trip: JsonBackedTrip) {
+type JsonBackedAgentMessage = {
+  metadataJson: string;
+  [key: string]: unknown;
+};
+
+type JsonBackedAgentToolCall = {
+  argumentsJson: string;
+  resultJson: string;
+  [key: string]: unknown;
+};
+
+export function serializeTrip<T extends JsonBackedTrip>(trip: T) {
   return {
     ...trip,
     buffer: safeJson(trip.bufferJson),
@@ -23,10 +35,26 @@ export function serializeTrip(trip: JsonBackedTrip) {
   };
 }
 
-export function serializeMemory(memory: JsonBackedMemory) {
+export function serializeMemory<T extends JsonBackedMemory>(memory: T) {
   return {
     ...memory,
-    value: safeJson(memory.valueJson)
+    value: safeJson(memory.valueJson),
+    metadata: safeJson(memory.metadataJson || "{}")
+  };
+}
+
+export function serializeAgentMessage<T extends JsonBackedAgentMessage>(message: T) {
+  return {
+    ...message,
+    metadata: safeJson(message.metadataJson)
+  };
+}
+
+export function serializeAgentToolCall<T extends JsonBackedAgentToolCall>(toolCall: T) {
+  return {
+    ...toolCall,
+    arguments: safeJson(toolCall.argumentsJson),
+    result: safeJson(toolCall.resultJson)
   };
 }
 
