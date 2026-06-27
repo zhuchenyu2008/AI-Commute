@@ -6,7 +6,7 @@
     "dev": "node scripts/next-cli.mjs dev",
     "build": "node scripts/next-cli.mjs build",
     "start": "node scripts/next-cli.mjs start",
-    "lint": "node scripts/next-cli.mjs lint",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
