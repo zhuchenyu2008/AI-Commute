@@ -12,7 +12,7 @@ Use a Next.js App Router monolith with an Agent service layer. The app, API rout
 
 This keeps local development and Docker operation simple while preserving clear internal boundaries. Long-running planning work is isolated in the Agent runner and scheduler modules, not embedded directly in page components.
 
-This design reflects the approved v2 flow: weather is an Agent decision tool, non-route buffer time is Agent-decided and stored as structured components, Docker support is required, Agent runs use a 10-minute timeout with retry instead of a reasoning-turn limit, and multi-stop trips are first-class.
+This design reflects the approved v2 flow: weather is exposed to the Agent as reference information for context and explanation, non-route buffer time is Agent-decided and stored as structured components, Docker support is required, Agent runs use a 10-minute timeout with retry instead of a reasoning-turn limit, and multi-stop trips are first-class.
 
 ## User Flow
 
@@ -58,7 +58,7 @@ This page is the visible planning workspace:
 
 - Shows user prompt and Agent decision steps.
 - Shows tool-call summaries without leaking secrets.
-- Shows route candidate comparisons, weather notes, and buffer reasoning.
+- Shows route candidate comparisons, weather reference notes, and buffer reasoning.
 - Shows completion state and automatic transition to trip detail.
 - Supports continuing an existing trip session from the detail page.
 
@@ -72,7 +72,7 @@ Follow the provided trip detail sample:
 - Arrival target and status.
 - Selected route and alternatives.
 - Timeline of route segments.
-- Timeline of buffer components, including non-route time such as mall entrance, walking from mall entrance to cinema, floor movement, check-in/security, transfer friction, bike pickup/parking, and weather margin.
+- Timeline of buffer components, including non-route time such as mall entrance, walking from mall entrance to cinema, floor movement, check-in/security, transfer friction, bike pickup/parking, and weather reference notes.
 - Reminder schedule.
 - Recalculation state.
 - Actions: recalculate now, change route, adjust buffer, stop monitoring, return to Agent conversation.
@@ -133,7 +133,7 @@ The Agent receives broad tool access:
 - Trigger Telegram/email notification adapters.
 - Mark trips, legs, and reminders as monitored, paused, done, or cancelled.
 
-Weather is a decision input, not just display data. The Agent uses it to rank route candidates and choose additional buffers. Rain, wind, heat, cold, and severe weather can down-rank cycling or walking and increase transfer/arrival buffers.
+Weather is reference information for the Agent, not a hard decision rule. The Agent may fetch and display weather, cite it in its reasoning, and use it as one piece of context when explaining route or buffer choices. The implementation must not encode mechanical weather-driven ranking such as always down-ranking cycling in rain or automatically adding fixed weather buffers.
 
 ### Time Model
 
@@ -151,10 +151,10 @@ Non-route buffer components include:
 - Bike pickup availability friction.
 - Metro transfer and platform waiting.
 - Road crossing and station entrance friction.
-- Weather margin.
+- Weather context note.
 - User preference margin.
 
-Every buffer component stores category, minutes, reason, and whether it came from Agent inference, user setting, memory, weather, or manual user override.
+Every buffer component stores category, minutes, reason, and whether it came from Agent inference, user setting, memory, weather context, or manual user override.
 
 ## AMap Integration
 
@@ -208,7 +208,7 @@ It finds due reminder jobs and processes them with locking to avoid duplicate se
 For each due job:
 
 1. Load trip, leg, selected candidate, settings, and memories.
-2. Run Agent-assisted recalculation with weather and route tools.
+2. Run Agent-assisted recalculation with route tools and optional weather reference.
 3. Update ETA, buffer components, route status, and latest departure when needed.
 4. Send notifications when the Agent decides action is needed.
 5. Log all recalculation and notification outcomes.
@@ -227,7 +227,7 @@ Notification content prioritizes action:
 - Latest departure time.
 - Arrival target.
 - Route summary.
-- Weather and buffer notes.
+- Weather reference and buffer notes.
 
 Every notification attempt writes a `NotificationLog`. Duplicate departure reminders are suppressed through stable dedupe keys.
 
@@ -245,18 +245,22 @@ SQLite data should live under a mounted `data/` directory.
 
 ## Frontend Design Requirements
 
-Use the provided frontend samples and design tokens:
+The implementation must strictly follow the existing `前端样板和规范` directory. `前端样板和规范/DESIGN.md`, `前端样板和规范/首页/code.html`, and `前端样板和规范/行程规划详情/code.html` are binding implementation references, not loose inspiration.
+
+Required frontend constraints:
 
 - Lumina Velocity visual language.
 - Inter typography.
 - Commute Blue primary action color.
 - Glass surfaces for major commute cards.
 - Mobile-first bottom navigation and desktop top navigation.
+- Page structure, spacing rhythm, navigation placement, rounded surfaces, status pills, trip timeline style, and action hierarchy must match the provided samples unless a new page has no sample equivalent.
+- New pages such as Agent Conversation, Settings, History, Memories, and Login must extend the same token set and component language from the samples.
 - Avoid marketing landing pages; the first screen is the working commute input.
 - Use icons for navigation and actions.
 - Keep operational UI dense but readable.
 
-Pages should be implemented as real application surfaces, not static mockups.
+Pages should be implemented as real application surfaces, not static mockups. Before completion, compare the implemented UI against the supplied sample screenshots and correct obvious deviations in spacing, color, typography, and navigation behavior.
 
 ## Testing Strategy
 
