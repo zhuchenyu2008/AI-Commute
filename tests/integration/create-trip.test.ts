@@ -392,6 +392,7 @@ describe("createPlannedTrip", () => {
       prisma.trip.findUniqueOrThrow({ where: { id: trip.id } })
     ).resolves.toMatchObject({
       title: "家-办公室",
+      finalStopName: "办公室",
     });
   });
 });

@@ -91,11 +91,12 @@ export async function createPlannedTrip(input: CreatePlannedTripInput) {
     const firstStop = orderedStops[0];
     const lastStop = orderedStops[orderedStops.length - 1];
     const lastLeg = orderedLegs[orderedLegs.length - 1];
+    const destinationName =
+      input.finalStopName ?? lastStop?.name ?? lastLeg?.destinationName;
     const normalizedTitle = normalizeRouteTitle({
       title: input.title,
       originName: firstLeg?.originName ?? firstStop?.name,
-      destinationName:
-        input.finalStopName ?? lastStop?.name ?? lastLeg?.destinationName,
+      destinationName,
     });
 
     const trip = await tx.trip.create({
@@ -107,8 +108,7 @@ export async function createPlannedTrip(input: CreatePlannedTripInput) {
         status: "monitoring",
         timezone: input.timezone,
         targetArriveAt: input.targetArriveAt,
-        finalStopName:
-          input.finalStopName ?? input.stops[input.stops.length - 1]?.name,
+        finalStopName: destinationName,
       },
     });
 
