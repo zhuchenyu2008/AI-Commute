@@ -74,6 +74,33 @@ describe("settings API", () => {
     expect(body.settings.originLngLat).toBe("");
   });
 
+  it("searches origin candidates for authenticated users", async () => {
+    const { GET } = await import("@app/api/places/search/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `place-search-${Date.now()}@example.com`,
+        name: "Place Search User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await GET(
+      new Request("http://localhost/api/places/search?keywords=外事学校&city=宁波")
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.places[0]).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: expect.any(String),
+        lngLat: expect.stringMatching(/^-?\d/),
+      })
+    );
+  });
+
   it("persists valid settings updates", async () => {
     const { PUT } = await import("@app/api/settings/route");
     const user = await prisma.user.create({
