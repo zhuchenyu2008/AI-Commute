@@ -70,7 +70,115 @@ describe("agent planning sessions", () => {
       prompt: "明天 9:15 喝完咖啡后到龙湖天街",
     });
 
-    const result = await runPlanningSession(session.id);
+    const chatClient: AgentChatClient = {
+      async complete({ messages }) {
+        const toolResultCount = messages.filter(
+          (message) => message.role === "tool"
+        ).length;
+
+        if (toolResultCount === 0) {
+          return {
+            message: {
+              role: "assistant",
+              content: "AI reads weather-reference evidence before planning.",
+              toolCalls: [
+                {
+                  id: "call-search-poi",
+                  name: "search_poi",
+                  arguments: { keywords: "龙湖天街", city: "Ningbo" },
+                },
+                {
+                  id: "call-weather",
+                  name: "get_weather_reference",
+                  arguments: { city: "Ningbo" },
+                },
+                {
+                  id: "call-transit",
+                  name: "get_transit_route",
+                  arguments: {
+                    destination: "121.616,29.868",
+                    city: "Ningbo",
+                    cityd: "Ningbo",
+                  },
+                },
+              ],
+            },
+          };
+        }
+
+        return {
+          message: {
+            role: "assistant",
+            content: "AI creates the final planned trip.",
+            toolCalls: [
+              {
+                id: "call-create-trip",
+                name: "create_trip",
+                arguments: {
+                  title: "宁波龙湖天街",
+                  timezone: "Asia/Shanghai",
+                  finalStopName: "宁波龙湖天街",
+                  stops: [
+                    {
+                      order: 1,
+                      name: "宁波龙湖天街",
+                      address: "浙江省宁波市龙湖天街",
+                      lngLat: "121.616,29.868",
+                      kind: "destination",
+                    },
+                  ],
+                  legs: [
+                    {
+                      order: 1,
+                      originName: "Home",
+                      originLngLat: "121.5230315924,29.8652491273",
+                      destinationName: "宁波龙湖天街",
+                      destinationLngLat: "121.616,29.868",
+                      routeMinutes: 42,
+                      bufferMinutes: 10,
+                      totalMinutes: 52,
+                      mode: "transit",
+                      routeTitle: "AI selected transit route",
+                      routeRationale:
+                        "AI compared tool evidence and selected transit.",
+                      segmentTitle: "Transit to Longhu",
+                      segmentDetail: "Generated from deterministic test tools.",
+                      segmentSource: "amap",
+                      source: { source: "test-agent" },
+                      bufferComponents: [
+                        {
+                          category: "venue",
+                          label: "Venue buffer",
+                          minutes: 5,
+                          reason: "Leave time to enter the mall.",
+                          source: "agent_inference",
+                        },
+                        {
+                          category: "transfer",
+                          label: "Transfer buffer",
+                          minutes: 5,
+                          reason: "Leave time for platform walking.",
+                          source: "agent_inference",
+                        },
+                        {
+                          category: "weather_context",
+                          label: "Weather context",
+                          minutes: 0,
+                          reason: "Weather is reference evidence only.",
+                          source: "weather_context",
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        };
+      },
+    };
+
+    const result = await runPlanningSession(session.id, { chatClient });
 
     expect(result.status).toBe("completed");
     expect(result.tripId).toEqual(expect.any(String));
@@ -101,7 +209,7 @@ describe("agent planning sessions", () => {
     expect(persisted.messages.map((message) => message.role)).toContain("assistant");
     expect(
       persisted.messages.some((message) =>
-        message.content.includes("天气仅作为参考信息")
+        message.content.includes("weather-reference")
       )
     ).toBe(true);
 
@@ -370,6 +478,8 @@ describe("agent planning sessions", () => {
           create: {
             defaultCity: "宁波",
             timezone: "Asia/Shanghai",
+            originName: "   ",
+            originLngLat: "   ",
             routePreference: "balanced",
           },
         },
@@ -396,6 +506,7 @@ describe("agent planning sessions", () => {
                   id: "call-transit-no-origin",
                   name: "get_transit_route",
                   arguments: {
+                    origin: "   ",
                     destination: "121.616,29.868",
                     city: "宁波",
                     cityd: "宁波",

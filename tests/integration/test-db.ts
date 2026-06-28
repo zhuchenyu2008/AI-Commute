@@ -29,6 +29,8 @@ async function executeMigration(migrationPath: string) {
 }
 
 async function ensureOptionalOriginMigration() {
+  // Existing local test DBs may have been created before optional origins.
+  // Patch only that known old shape without replaying the init migration.
   const columns = await prisma.$queryRawUnsafe<
     Array<{ name: string; notnull: number }>
   >("PRAGMA table_info('UserSettings')");

@@ -420,6 +420,11 @@ function readArray(value: Record<string, unknown>, key: string): unknown[] {
   return raw;
 }
 
+function firstNonEmptyString(...values: Array<string | undefined>) {
+  return values.find((value) => typeof value === "string" && value.trim())
+    ?.trim();
+}
+
 function normalizeBufferComponent(value: unknown): BufferComponentInput {
   const component = requireObject(value, "bufferComponents[]");
   return {
@@ -586,8 +591,12 @@ async function executeToolCall(
     name === "get_walking_route" ||
     name === "get_bicycling_route"
   ) {
+    const origin = firstNonEmptyString(
+      readOptionalString(args, "origin"),
+      settings.originLngLat
+    );
     const request = {
-      origin: readOptionalString(args, "origin") ?? settings.originLngLat,
+      origin: origin ?? "",
       destination: readString(args, "destination"),
       city: readOptionalString(args, "city") ?? settings.defaultCity,
       cityd: readOptionalString(args, "cityd") ?? settings.defaultCity,
