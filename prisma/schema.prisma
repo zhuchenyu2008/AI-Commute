@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String
+  passwordHash     String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  sessions         Session[]
+  settings         UserSettings?
+  agentSessions    AgentSession[]
+  trips            Trip[]
+  memories         Memory[]
+  memoryCandidates MemoryCandidate[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model UserSettings {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  defaultCity         String   @default("宁波")
+  timezone            String   @default("Asia/Shanghai")
+  originName          String   @default("家")
+  originLngLat        String
+  routePreference     String   @default("balanced")
+  telegramChatId      String?
+  emailRecipient      String?
+  reminderCadenceJson String   @default("[30,20,15,10,5,0]")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AgentSession {
+  id          String          @id @default(cuid())
+  userId      String
+  tripId      String?
+  status      String          @default("running")
+  purpose     String          @default("planning")
+  prompt      String
+  retryCount  Int             @default(0)
+  timeoutMs   Int             @default(600000)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip        Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  messages    AgentMessage[]
+  toolCalls   AgentToolCall[]
+
+  @@index([userId])
+  @@index([tripId])
+  @@index([status])
+}
+
+model AgentMessage {
+  id             String       @id @default(cuid())
+  agentSessionId String
+  role           String
+  content        String
+  metadataJson   String?
+  createdAt      DateTime     @default(now())
+  agentSession   AgentSession @relation(fields: [agentSessionId], references: [id], onDelete: Cascade)
+
+  @@index([agentSessionId])
+  @@index([createdAt])
+}
+
+model AgentToolCall {
+  id             String       @id @default(cuid())
+  agentSessionId String
+  name           String
+  requestJson    String
+  responseJson   String?
+  status         String       @default("pending")
+  durationMs     Int?
+  error          String?
+  createdAt      DateTime     @default(now())
+  agentSession   AgentSession @relation(fields: [agentSessionId], references: [id], onDelete: Cascade)
+
+  @@index([agentSessionId])
+  @@index([status])
+}
+
+model Trip {
+  id              String             @id @default(cuid())
+  userId          String
+  agentSessionId  String?
+  title           String
+  rawPrompt       String
+  status          String             @default("planning")
+  timezone        String
+  targetArriveAt  DateTime?
+  finalStopName   String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentSessions   AgentSession[]
+  stops           TripStop[]
+  legs            TripLeg[]
+  reminderJobs    ReminderJob[]
+  recalculations  RecalculationLog[]
+  notifications   NotificationLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([targetArriveAt])
+}
+
+model TripStop {
+  id              String    @id @default(cuid())
+  tripId          String
+  order           Int
+  name            String
+  address         String?
+  lngLat          String?
+  targetArriveAt  DateTime?
+  plannedStayMin  Int?
+  kind            String    @default("destination")
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  trip            Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  incomingLegs    TripLeg[] @relation("ToStop")
+  outgoingLegs    TripLeg[] @relation("FromStop")
+
+  @@unique([tripId, order])
+  @@index([tripId])
+}
+
+model TripLeg {
+  id                    String             @id @default(cuid())
+  tripId                String
+  order           Int
+  fromStopId      String?
+  toStopId        String
+  originName            String
+  originLngLat          String
+  destinationName       String
+  destinationLngLat     String?
+  targetArriveAt        DateTime?
+  latestDepartAt        DateTime?
+  selectedCandidateId   String?
+  status                String             @default("planning")
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  trip                  Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fromStop              TripStop?          @relation("FromStop", fields: [fromStopId], references: [id], onDelete: SetNull)
+  toStop                TripStop           @relation("ToStop", fields: [toStopId], references: [id], onDelete: Restrict)
+  routeCandidates       RouteCandidate[]
+  routeSegments         RouteSegment[]
+  bufferComponents      BufferComponent[]
+  reminderJobs          ReminderJob[]
+  recalculations        RecalculationLog[]
+  notifications         NotificationLog[]
+
+  @@unique([tripId, order])
+  @@index([tripId])
+  @@index([fromStopId])
+  @@index([toStopId])
+  @@index([selectedCandidateId])
+}
+
+model RouteCandidate {
+  id              String         @id @default(cuid())
+  legId           String
+  key             String
+  title           String
+  mode            String
+  routeMinutes    Int
+  bufferMinutes   Int
+  totalMinutes    Int
+  selected        Boolean        @default(false)
+  rationale       String
+  sourceJson      String?
+  createdAt       DateTime       @default(now())
+  leg             TripLeg        @relation(fields: [legId], references: [id], onDelete: Cascade)
+  segments        RouteSegment[]
+
+  @@index([legId])
+  @@index([mode])
+  @@index([selected])
+}
+
+model RouteSegment {
+  id          String          @id @default(cuid())
+  legId       String
+  candidateId String?
+  order       Int
+  mode        String
+  title       String
+  detail      String?
+  minutes     Int
+  source      String          @default("agent")
+  rawJson     String?
+  leg         TripLeg         @relation(fields: [legId], references: [id], onDelete: Cascade)
+  candidate   RouteCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@unique([legId, order])
+  @@index([candidateId])
+}
+
+model BufferComponent {
+  id        String   @id @default(cuid())
+  legId     String
+  order     Int
+  category  String
+  label     String
+  minutes   Int
+  reason    String
+  source    String   @default("agent_inference")
+  createdAt DateTime @default(now())
+  leg       TripLeg  @relation(fields: [legId], references: [id], onDelete: Cascade)
+
+  @@index([legId])
+  @@index([category])
+}
+
+model ReminderJob {
+  id           String    @id @default(cuid())
+  tripId       String
+  legId        String?
+  kind         String
+  scheduledFor DateTime
+  status       String    @default("scheduled")
+  lockedAt     DateTime?
+  attempts     Int       @default(0)
+  dedupeKey    String    @unique
+  payloadJson  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  trip         Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  leg          TripLeg?  @relation(fields: [legId], references: [id], onDelete: SetNull)
+
+  @@index([tripId])
+  @@index([legId])
+  @@index([status, scheduledFor])
+}
+
+model RecalculationLog {
+  id        String   @id @default(cuid())
+  tripId    String
+  legId     String?
+  trigger   String
+  status    String
+  summary   String
+  createdAt DateTime @default(now())
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  leg       TripLeg? @relation(fields: [legId], references: [id], onDelete: SetNull)
+
+  @@index([tripId])
+  @@index([legId])
+  @@index([createdAt])
+}
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  tripId    String
+  legId     String?
+  channel   String
+  status    String
+  recipient String?
+  dedupeKey String
+  content   String
+  error     String?
+  createdAt DateTime @default(now())
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  leg       TripLeg? @relation(fields: [legId], references: [id], onDelete: SetNull)
+
+  @@index([tripId])
+  @@index([legId])
+  @@index([channel])
+  @@index([status])
+  @@unique([dedupeKey])
+}
+
+model Memory {
+  id          String   @id @default(cuid())
+  userId      String
+  kind        String
+  label       String
+  valueJson   String
+  confirmedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([kind])
+}
+
+model MemoryCandidate {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  label     String
+  valueJson String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
