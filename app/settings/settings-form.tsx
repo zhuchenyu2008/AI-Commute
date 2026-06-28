@@ -30,6 +30,7 @@ type PlaceCandidate = {
 export function SettingsForm({ values }: { values: SettingsValues }) {
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [defaultCity, setDefaultCity] = useState(values.defaultCity);
   const [originName, setOriginName] = useState(values.originName);
   const [originLngLat, setOriginLngLat] = useState(values.originLngLat);
   const [originQuery, setOriginQuery] = useState(values.originName);
@@ -61,7 +62,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
 
     setPlaceStatus("正在搜索");
     const response = await fetch(
-      `/api/places/search?keywords=${encodeURIComponent(keywords)}&city=${encodeURIComponent(values.defaultCity)}`
+      `/api/places/search?keywords=${encodeURIComponent(keywords)}&city=${encodeURIComponent(defaultCity)}`
     );
     const payload = await response.json().catch(() => ({}));
 
@@ -87,9 +88,10 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
           <span className="text-sm font-medium text-on-surface-variant">默认城市</span>
           <input
             className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
-            defaultValue={values.defaultCity}
             id="defaultCity"
             name="defaultCity"
+            onChange={(event) => setDefaultCity(event.target.value)}
+            value={defaultCity}
           />
         </label>
 
@@ -113,6 +115,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
             <input name="originLngLat" type="hidden" value={originLngLat} />
             <div className="flex gap-2">
               <input
+                aria-label="搜索默认出发点"
                 className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
                 onChange={(event) => setOriginQuery(event.target.value)}
                 placeholder="搜索地点，例如外事学校"

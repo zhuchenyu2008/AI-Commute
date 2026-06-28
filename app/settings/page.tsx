@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { readEnv } from "@/lib/env";
 import { SettingsForm } from "./settings-form";
 
 export default async function SettingsPage() {
@@ -14,10 +15,11 @@ export default async function SettingsPage() {
   const settings = await prisma.userSettings.findUnique({
     where: { userId: user.id },
   });
+  const env = readEnv();
 
   const values = {
-    defaultCity: settings?.defaultCity ?? "宁波",
-    timezone: settings?.timezone ?? "Asia/Shanghai",
+    defaultCity: settings?.defaultCity ?? env.defaultCity,
+    timezone: settings?.timezone ?? env.defaultTimezone,
     originName: settings?.originName ?? "",
     originLngLat: settings?.originLngLat ?? "",
     routePreference: settings?.routePreference ?? "balanced",

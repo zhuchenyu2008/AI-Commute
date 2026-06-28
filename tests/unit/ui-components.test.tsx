@@ -1,6 +1,9 @@
+// @vitest-environment jsdom
+
 import React from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import RootLayout from "@app/layout";
 import {
   buildAgentEvents,
@@ -15,6 +18,11 @@ import { RouteTimeline } from "@/components/trips/route-timeline";
 import { SettingsForm } from "@app/settings/settings-form";
 
 describe("sample-aligned UI components", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("renders BottomNav labels and navigation aria labels", () => {
     const html = renderToStaticMarkup(<BottomNav active="home" />);
 
@@ -228,5 +236,78 @@ describe("sample-aligned UI components", () => {
     expect(html).not.toContain("出发点坐标");
     expect(html).toContain('name="originLngLat"');
     expect(html).toContain('type="hidden"');
+  });
+
+  it("searches places with the edited default city and submits the selected origin", async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const requestUrl = String(url);
+
+      if (requestUrl.startsWith("/api/places/search")) {
+        return Response.json({
+          places: [
+            {
+              id: "west-lake",
+              name: "西湖",
+              address: "杭州市西湖区",
+              lngLat: "120.141705,30.259244",
+            },
+          ],
+        });
+      }
+
+      if (requestUrl === "/api/settings" && init?.method === "PUT") {
+        return Response.json({ settings: {} });
+      }
+
+      return Response.json({ error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <SettingsForm
+        values={{
+          defaultCity: "宁波",
+          timezone: "Asia/Shanghai",
+          originName: "",
+          originLngLat: "",
+          routePreference: "balanced",
+          telegramChatId: "",
+          emailRecipient: "",
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("默认城市"), {
+      target: { value: "杭州" },
+    });
+    fireEvent.change(screen.getByLabelText("搜索默认出发点"), {
+      target: { value: "西湖" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("city=%E6%9D%AD%E5%B7%9E")
+      );
+    });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("city=%E5%AE%81%E6%B3%A2")
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /西湖/ }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      const putCall = fetchMock.mock.calls.find(([url, init]) => {
+        return String(url) === "/api/settings" && init?.method === "PUT";
+      });
+      expect(putCall).toBeDefined();
+      expect(JSON.parse(String(putCall?.[1]?.body))).toEqual(
+        expect.objectContaining({
+          originName: "西湖",
+          originLngLat: "120.141705,30.259244",
+        })
+      );
+    });
   });
 });
