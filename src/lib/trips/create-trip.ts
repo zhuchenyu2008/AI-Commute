@@ -81,11 +81,12 @@ export async function createPlannedTrip(input: CreatePlannedTripInput) {
     const firstLeg = input.legs?.[0];
     const firstStop = input.stops[0];
     const lastStop = input.stops[input.stops.length - 1];
+    const lastLeg = input.legs?.[input.legs.length - 1];
     const normalizedTitle = normalizeRouteTitle({
       title: input.title,
       originName: firstLeg?.originName ?? firstStop?.name,
       destinationName:
-        firstLeg?.destinationName ?? input.finalStopName ?? lastStop?.name,
+        input.finalStopName ?? lastStop?.name ?? lastLeg?.destinationName,
     });
 
     const trip = await tx.trip.create({
