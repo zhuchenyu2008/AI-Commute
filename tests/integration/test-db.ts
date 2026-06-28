@@ -21,6 +21,31 @@ function readMigrationFiles() {
     .sort();
 }
 
+async function executeMigration(migrationPath: string) {
+  const migration = readFileSync(migrationPath, "utf8");
+  for (const statement of splitSqlStatements(migration)) {
+    await prisma.$executeRawUnsafe(statement);
+  }
+}
+
+async function ensureOptionalOriginMigration() {
+  const columns = await prisma.$queryRawUnsafe<
+    Array<{ name: string; notnull: number }>
+  >("PRAGMA table_info('UserSettings')");
+  const originColumns = columns.filter((column) =>
+    ["originName", "originLngLat"].includes(column.name)
+  );
+  const hasRequiredOrigin = originColumns.some(
+    (column) => Number(column.notnull) === 1
+  );
+
+  if (hasRequiredOrigin) {
+    await executeMigration(
+      "prisma/migrations/20260628193000_optional_origin_settings/migration.sql"
+    );
+  }
+}
+
 export async function ensureTestDatabase() {
   if (ensured) return;
 
@@ -41,11 +66,10 @@ export async function ensureTestDatabase() {
 
   if (existing.length === 0) {
     for (const migrationPath of readMigrationFiles()) {
-      const migration = readFileSync(migrationPath, "utf8");
-      for (const statement of splitSqlStatements(migration)) {
-        await prisma.$executeRawUnsafe(statement);
-      }
+      await executeMigration(migrationPath);
     }
+  } else {
+    await ensureOptionalOriginMigration();
   }
 
   ensured = true;
