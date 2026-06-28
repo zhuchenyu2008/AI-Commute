@@ -13,6 +13,7 @@ import { assertAgentRunActive, recordToolCall } from "@/lib/agent/tools";
 import { buildConfirmedMemoryContext } from "@/lib/memories/context";
 import type {
   AgentToolName,
+  ContinueAgentSessionInput,
   PlanningAttemptResult,
   PlanningSessionResult,
   StartPlanningSessionInput,
@@ -22,6 +23,14 @@ import {
   runWithTimeoutAndRetry,
 } from "@/lib/agent/runner";
 import { createPlannedTrip } from "@/lib/trips/create-trip";
+import {
+  cancelTripMonitoring,
+  createMemoryCandidateForTrip,
+  replaceReminderSchedule,
+  replaceTripRoute,
+  selectRouteCandidate,
+  updateTripSummary,
+} from "@/lib/trips/route-updates";
 import type {
   BufferComponentInput,
   CreatePlannedTripInput,
@@ -31,6 +40,8 @@ import type {
 
 const SESSION_TIMEOUT_MS = 600000;
 const SESSION_MAX_ATTEMPTS = 2;
+const ORIGIN_REQUIRED_MESSAGE =
+  "Please select a default origin in settings, or provide an origin for this route request.";
 
 export { AgentRunTimeoutError };
 
@@ -52,6 +63,7 @@ type ToolExecutionContext = {
   sessionId: string;
   userId: string;
   prompt: string;
+  tripId?: string | null;
   signal?: AbortSignal;
 };
 
@@ -85,7 +97,7 @@ function normalizePlanningSettings(settings: {
 function normalizePrompt(prompt: string) {
   const trimmed = prompt.trim();
   if (!trimmed) {
-    throw new Error("请输入通勤规划需求。");
+    throw new Error("Please enter a commute planning request.");
   }
 
   return trimmed;
@@ -93,22 +105,24 @@ function normalizePrompt(prompt: string) {
 
 export function formatPlanningFailureMessage(error: unknown) {
   if (error instanceof AgentRunTimeoutError) {
-    return "规划失败：智能体规划超时，请稍后重试。";
+    return "Planning failed: the agent run timed out. Please try again.";
   }
 
   if (error instanceof Error) {
     const knownMessages: Record<string, string> = {
-      "Agent run aborted.": "规划失败：智能体运行已中止。",
-      "timeoutMs must be greater than zero.": "规划失败：内部运行配置无效。",
-      "maxAttempts must be greater than zero.": "规划失败：内部重试配置无效。",
+      "Agent run aborted.": "Planning failed: the agent run was aborted.",
+      "timeoutMs must be greater than zero.":
+        "Planning failed: invalid internal timeout configuration.",
+      "maxAttempts must be greater than zero.":
+        "Planning failed: invalid internal retry configuration.",
       "Agent planning failed after all attempts.":
-        "规划失败：多次尝试后仍未完成，请稍后重试。",
+        "Planning failed after multiple attempts. Please try again.",
     };
 
-    return knownMessages[error.message] ?? `规划失败：${error.message}`;
+    return knownMessages[error.message] ?? `Planning failed: ${error.message}`;
   }
 
-  return "规划失败：请稍后重试。";
+  return "Planning failed. Please try again.";
 }
 
 async function createAssistantMessage(input: {
@@ -217,17 +231,17 @@ const legSchema = objectParameters(
 const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   {
     name: "read_settings",
-    description: "读取当前用户的城市、时区、出发点和路线偏好。",
+    description: "Read the user's city, timezone, default origin, and route preference.",
     parameters: objectParameters({}),
   },
   {
     name: "read_memories",
-    description: "读取用户已确认的个人通勤记忆和偏好。",
+    description: "Read confirmed commute memories and preferences.",
     parameters: objectParameters({}),
   },
   {
     name: "search_poi",
-    description: "使用高德关键字搜索 POI，返回候选地点和经纬度。",
+    description: "Search AMap POIs by keyword.",
     parameters: objectParameters(
       {
         keywords: { type: "string" },
@@ -238,17 +252,18 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   },
   {
     name: "get_poi_detail",
-    description: "读取高德 POI 详情。",
+    description: "Read AMap POI details.",
     parameters: objectParameters({ id: { type: "string" } }, ["id"]),
   },
   {
     name: "get_weather_reference",
-    description: "读取高德天气，作为 AI 决策参考，不由应用写死路线排序。",
+    description:
+      "Read AMap weather as reference evidence. The application does not hard-code weather rules.",
     parameters: objectParameters({ city: { type: "string" } }, ["city"]),
   },
   {
     name: "get_transit_route",
-    description: "查询高德公交/地铁路线。",
+    description: "Query AMap transit route.",
     parameters: objectParameters(
       {
         origin: { type: "string" },
@@ -261,7 +276,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   },
   {
     name: "get_walking_route",
-    description: "查询高德步行路线。",
+    description: "Query AMap walking route.",
     parameters: objectParameters(
       {
         origin: { type: "string" },
@@ -274,7 +289,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   },
   {
     name: "get_bicycling_route",
-    description: "查询高德骑行路线。",
+    description: "Query AMap bicycling route.",
     parameters: objectParameters(
       {
         origin: { type: "string" },
@@ -288,7 +303,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   {
     name: "create_trip",
     description:
-      "在 AI 已完成比较和决策后创建最终行程。路线、缓冲和理由都必须由 AI 根据工具结果给出。",
+      "Create the final planned trip after the AI has gathered evidence and made a decision.",
     parameters: objectParameters(
       {
         title: { type: "string" },
@@ -301,15 +316,94 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
       ["title", "timezone", "stops", "legs"]
     ),
   },
+  {
+    name: "read_current_trip",
+    description:
+      "Read the current trip with stops, legs, route candidates, buffers, segments, and reminders.",
+    parameters: objectParameters({ tripId: { type: "string" } }),
+  },
+  {
+    name: "update_trip_summary",
+    description:
+      "Update the current trip summary: title, final stop, target arrival, and status.",
+    parameters: objectParameters({
+      tripId: { type: "string" },
+      title: { type: "string" },
+      finalStopName: { type: "string" },
+      targetArriveAt: { type: "string" },
+      status: { type: "string" },
+    }),
+  },
+  {
+    name: "replace_trip_stops",
+    description:
+      "Replace trip stops. Provide legs too to rebuild the complete route transactionally.",
+    parameters: objectParameters({
+      tripId: { type: "string" },
+      title: { type: "string" },
+      finalStopName: { type: "string" },
+      targetArriveAt: { type: "string" },
+      stops: arrayOfItems(stopSchema),
+      legs: arrayOfItems(legSchema),
+    }),
+  },
+  {
+    name: "replace_trip_legs",
+    description:
+      "Replace trip legs. Provide stops too to rebuild the complete route transactionally.",
+    parameters: objectParameters({
+      tripId: { type: "string" },
+      title: { type: "string" },
+      finalStopName: { type: "string" },
+      targetArriveAt: { type: "string" },
+      stops: arrayOfItems(stopSchema),
+      legs: arrayOfItems(legSchema),
+    }),
+  },
+  {
+    name: "select_route_candidate",
+    description: "Select an existing route candidate for a trip leg.",
+    parameters: objectParameters({
+      tripId: { type: "string" },
+      legId: { type: "string" },
+      legOrder: { type: "number" },
+      candidateId: { type: "string" },
+      candidateKey: { type: "string" },
+    }),
+  },
+  {
+    name: "replace_reminder_schedule",
+    description: "Regenerate reminder jobs from the current latest departure times.",
+    parameters: objectParameters({
+      tripId: { type: "string" },
+      legId: { type: "string" },
+      legOrder: { type: "number" },
+      cadenceMinutes: arrayOfItems({ type: "number" }),
+    }),
+  },
+  {
+    name: "cancel_trip_monitoring",
+    description: "Cancel monitoring for the current trip and scheduled reminders.",
+    parameters: objectParameters({ tripId: { type: "string" } }),
+  },
+  {
+    name: "create_memory_candidate",
+    description: "Create a pending memory candidate for user confirmation.",
+    parameters: objectParameters(
+      {
+        tripId: { type: "string" },
+        kind: { type: "string" },
+        label: { type: "string" },
+        valueJson: {},
+      },
+      ["kind", "label", "valueJson"]
+    ),
+  },
 ];
 
-const SYSTEM_PROMPT = `你是一个个人通勤规划 AI。当前日期按北京时间理解。
-
-你必须自己规划、计算、比较和决策。应用只向你暴露工具，不会替你硬编码路线排序、目的地抽取或缓冲分钟数。
-
-可用工具包括用户设置、记忆、所有高德地点/天气/公交/步行/骑行接口，以及最终 create_trip。你可以在超时前任意多轮调用工具。不要因为天气写死规则，也不要默认固定缓冲；天气、路线结果、用户偏好和记忆都只是你决策的证据。
-
-只有当你已经获得足够证据并完成比较后，才调用 create_trip。create_trip 中必须写出你选择的停靠点、每段路线、路线分钟数、非路线缓冲组件、选择理由和来源。`;
+const SYSTEM_PROMPT = `You are a personal commute-planning AI. Current dates should be interpreted in Beijing time.
+You must plan, calculate, compare, and decide yourself. The app only exposes tools; it will not hard-code route ranking, destination extraction, or buffer minutes for you.
+Available tools include user settings, memories, all AMap POI/weather/transit/walking/bicycling tools, create_trip, and current-route update tools. You may call tools for as many rounds as needed before timeout. Weather, route results, user preferences, and memories are evidence for your decision, not fixed app rules.`;
 
 async function createInitialMessages(
   session: { prompt: string; userId: string },
@@ -317,38 +411,68 @@ async function createInitialMessages(
 ) {
   const memoryContext = await buildConfirmedMemoryContext(session.userId);
   const messages: AgentChatMessage[] = [
-    {
-      role: "system",
-      content: SYSTEM_PROMPT,
-    },
-    {
-      role: "system",
-      content: memoryContext,
-    },
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: memoryContext },
     {
       role: "user",
-      content: `第 ${attempt} 次规划请求：${session.prompt}`,
+      content: `Planning attempt ${attempt}: ${session.prompt}`,
     },
   ];
 
   return messages;
 }
 
+async function createContinuationMessages(session: {
+  id: string;
+  prompt: string;
+  userId: string;
+  tripId: string | null;
+}) {
+  const memoryContext = await buildConfirmedMemoryContext(session.userId);
+  const persistedMessages = await prisma.agentMessage.findMany({
+    where: { agentSessionId: session.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const messages: AgentChatMessage[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: memoryContext },
+    {
+      role: "system",
+      content:
+        "Continue the existing planning session. All planning and route update tools are available. You may call tools for as many rounds as needed until timeout. If a current trip exists, use route update tools to revise it instead of assuming the app will update it for you.",
+    },
+    {
+      role: "system",
+      content: `Original planning prompt: ${session.prompt}. Current trip id: ${
+        session.tripId ?? "none"
+      }.`,
+    },
+  ];
+
+  for (const message of persistedMessages) {
+    if (
+      message.role === "system" ||
+      message.role === "user" ||
+      message.role === "assistant"
+    ) {
+      messages.push({
+        role: message.role,
+        content: message.content,
+      });
+    }
+  }
+
+  return messages;
+}
+
 function getToolName(name: string): AgentToolName {
-  const allowed = new Set<AgentToolName>([
-    "read_settings",
-    "read_memories",
-    "search_poi",
-    "get_poi_detail",
-    "get_weather_reference",
-    "get_transit_route",
-    "get_walking_route",
-    "get_bicycling_route",
-    "create_trip",
-  ]);
+  const allowed = new Set(
+    TOOL_DEFINITIONS.map((tool) => tool.name as AgentToolName)
+  );
 
   if (!allowed.has(name as AgentToolName)) {
-    throw new Error(`未知智能体工具：${name}`);
+    throw new Error(`Unknown agent tool: ${name}`);
   }
 
   return name as AgentToolName;
@@ -356,7 +480,7 @@ function getToolName(name: string): AgentToolName {
 
 function requireObject(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} 必须是对象。`);
+    throw new Error(`${label} must be an object.`);
   }
 
   return value as Record<string, unknown>;
@@ -376,7 +500,7 @@ function readString(
     return fallback;
   }
 
-  throw new Error(`工具参数缺少字符串字段：${key}`);
+  throw new Error(`Missing string tool argument: ${key}`);
 }
 
 function readOptionalString(value: Record<string, unknown>, key: string) {
@@ -392,7 +516,7 @@ function readOptionalNumber(value: Record<string, unknown>, key: string) {
 
   const numeric = Number(raw);
   if (!Number.isFinite(numeric)) {
-    throw new Error(`工具参数字段 ${key} 必须是数字。`);
+    throw new Error(`Tool argument ${key} must be a number.`);
   }
 
   return numeric;
@@ -401,7 +525,7 @@ function readOptionalNumber(value: Record<string, unknown>, key: string) {
 function readNumber(value: Record<string, unknown>, key: string) {
   const numeric = readOptionalNumber(value, key);
   if (numeric === undefined) {
-    throw new Error(`工具参数缺少数字字段：${key}`);
+    throw new Error(`Missing number tool argument: ${key}`);
   }
 
   return numeric;
@@ -415,7 +539,7 @@ function readOptionalDate(value: Record<string, unknown>, key: string) {
 
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) {
-    throw new Error(`工具参数字段 ${key} 不是有效日期。`);
+    throw new Error(`Tool argument ${key} is not a valid date.`);
   }
 
   return date;
@@ -424,7 +548,20 @@ function readOptionalDate(value: Record<string, unknown>, key: string) {
 function readArray(value: Record<string, unknown>, key: string): unknown[] {
   const raw = value[key];
   if (!Array.isArray(raw)) {
-    throw new Error(`工具参数字段 ${key} 必须是数组。`);
+    throw new Error(`Tool argument ${key} must be an array.`);
+  }
+
+  return raw;
+}
+
+function readOptionalArray(value: Record<string, unknown>, key: string) {
+  const raw = value[key];
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+
+  if (!Array.isArray(raw)) {
+    throw new Error(`Tool argument ${key} must be an array.`);
   }
 
   return raw;
@@ -506,6 +643,134 @@ function normalizeCreateTripInput(
   };
 }
 
+function readTripId(args: Record<string, unknown>, context: ToolExecutionContext) {
+  const tripId = readOptionalString(args, "tripId") ?? context.tripId;
+  if (!tripId) {
+    throw new Error("The current session has no associated trip.");
+  }
+
+  return tripId;
+}
+
+async function readCurrentTrip(context: ToolExecutionContext, tripId: string) {
+  return recordToolCall({
+    agentSessionId: context.sessionId,
+    name: "read_current_trip",
+    request: { tripId },
+    signal: context.signal,
+    run: () =>
+      prisma.trip.findFirstOrThrow({
+        where: { id: tripId, userId: context.userId },
+        include: {
+          stops: { orderBy: { order: "asc" } },
+          legs: {
+            orderBy: { order: "asc" },
+            include: {
+              selectedCandidate: true,
+              routeCandidates: { orderBy: { createdAt: "asc" } },
+              routeSegments: { orderBy: { order: "asc" } },
+              bufferComponents: { orderBy: { order: "asc" } },
+              reminderJobs: { orderBy: { scheduledFor: "asc" } },
+            },
+          },
+          reminderJobs: { orderBy: { scheduledFor: "asc" } },
+        },
+      }),
+  });
+}
+
+async function loadCurrentRouteInputs(tripId: string, userId: string) {
+  const trip = await prisma.trip.findFirstOrThrow({
+    where: { id: tripId, userId },
+    include: {
+      stops: { orderBy: { order: "asc" } },
+      legs: {
+        orderBy: { order: "asc" },
+        include: {
+          selectedCandidate: true,
+          bufferComponents: { orderBy: { order: "asc" } },
+          routeSegments: { orderBy: { order: "asc" } },
+        },
+      },
+    },
+  });
+
+  return {
+    trip,
+    stops: trip.stops.map((stop) => ({
+      order: stop.order,
+      name: stop.name,
+      address: stop.address ?? undefined,
+      lngLat: stop.lngLat ?? undefined,
+      targetArriveAt: stop.targetArriveAt ?? undefined,
+      plannedStayMin: stop.plannedStayMin ?? undefined,
+      kind: stop.kind,
+      notes: stop.notes ?? undefined,
+    })),
+    legs: trip.legs.map((leg) => ({
+      order: leg.order,
+      originName: leg.originName,
+      originLngLat: leg.originLngLat,
+      destinationName: leg.destinationName,
+      destinationLngLat: leg.destinationLngLat ?? undefined,
+      routeMinutes: leg.selectedCandidate?.routeMinutes ?? 30,
+      bufferMinutes: leg.selectedCandidate?.bufferMinutes ?? undefined,
+      totalMinutes: leg.selectedCandidate?.totalMinutes ?? undefined,
+      latestDepartAt: leg.latestDepartAt ?? undefined,
+      targetArriveAt: leg.targetArriveAt ?? undefined,
+      mode: leg.selectedCandidate?.mode ?? undefined,
+      routeTitle: leg.selectedCandidate?.title ?? undefined,
+      routeRationale: leg.selectedCandidate?.rationale ?? undefined,
+      segmentTitle: leg.routeSegments[0]?.title,
+      segmentDetail: leg.routeSegments[0]?.detail ?? undefined,
+      segmentSource: leg.routeSegments[0]?.source,
+      bufferComponents: leg.bufferComponents.map((component) => ({
+        category: component.category,
+        label: component.label,
+        minutes: component.minutes,
+        reason: component.reason,
+        source: component.source as BufferComponentInput["source"],
+      })),
+    })),
+  };
+}
+
+async function normalizeReplaceRouteInput(
+  args: Record<string, unknown>,
+  context: ToolExecutionContext
+) {
+  const tripId = readTripId(args, context);
+  const current = await loadCurrentRouteInputs(tripId, context.userId);
+  const stopArgs = readOptionalArray(args, "stops");
+  const legArgs = readOptionalArray(args, "legs");
+  const stops = stopArgs ? stopArgs.map(normalizeStop) : current.stops;
+  const legs = legArgs ? legArgs.map(normalizeLeg) : current.legs;
+
+  if (!stops.length || !legs.length) {
+    throw new Error(
+      "Replacing stops or legs requires complete route data or an existing route to merge with."
+    );
+  }
+
+  return {
+    tripId,
+    userId: context.userId,
+    title: readOptionalString(args, "title") ?? current.trip.title,
+    finalStopName:
+      readOptionalString(args, "finalStopName") ??
+      current.trip.finalStopName ??
+      legs[legs.length - 1]?.destinationName ??
+      stops[stops.length - 1]?.name,
+    targetArriveAt:
+      readOptionalDate(args, "targetArriveAt") ??
+      current.trip.targetArriveAt ??
+      undefined,
+    status: readOptionalString(args, "status") ?? "monitoring",
+    stops,
+    legs,
+  };
+}
+
 async function readSettings(context: ToolExecutionContext) {
   return recordToolCall({
     agentSessionId: context.sessionId,
@@ -536,7 +801,7 @@ async function executeToolCall(
   settings: PlanningSettings
 ) {
   const name = getToolName(toolCall.name);
-  const args = requireObject(toolCall.arguments, `${name} 参数`);
+  const args = requireObject(toolCall.arguments, `${name} arguments`);
   const amap = context.amap;
 
   if (name === "read_settings") {
@@ -625,13 +890,122 @@ async function executeToolCall(
       signal: context.signal,
       run: async () => {
         if (!request.origin) {
-          throw new Error(
-            "请先在设置中选择默认出发点，或在本次请求中提供出发点。"
-          );
+          throw new Error(ORIGIN_REQUIRED_MESSAGE);
         }
 
         return route();
       },
+    });
+  }
+
+  if (name === "read_current_trip") {
+    return readCurrentTrip(context, readTripId(args, context));
+  }
+
+  if (name === "update_trip_summary") {
+    const tripId = readTripId(args, context);
+    const request = {
+      tripId,
+      userId: context.userId,
+      title: readOptionalString(args, "title"),
+      finalStopName: readOptionalString(args, "finalStopName"),
+      targetArriveAt: readOptionalDate(args, "targetArriveAt"),
+      status: readOptionalString(args, "status"),
+    };
+    return recordToolCall({
+      agentSessionId: context.sessionId,
+      name,
+      request,
+      signal: context.signal,
+      run: () => updateTripSummary(request),
+    });
+  }
+
+  if (name === "replace_trip_stops" || name === "replace_trip_legs") {
+    const request = await normalizeReplaceRouteInput(args, context);
+    return recordToolCall({
+      agentSessionId: context.sessionId,
+      name,
+      request,
+      signal: context.signal,
+      run: async () => {
+        const updated = await replaceTripRoute(request);
+        context.tripId = updated.id;
+        return updated;
+      },
+    });
+  }
+
+  if (name === "select_route_candidate") {
+    const request = {
+      tripId: readTripId(args, context),
+      userId: context.userId,
+      legId: readOptionalString(args, "legId"),
+      legOrder: readOptionalNumber(args, "legOrder"),
+      candidateId: readOptionalString(args, "candidateId"),
+      candidateKey: readOptionalString(args, "candidateKey"),
+    };
+    return recordToolCall({
+      agentSessionId: context.sessionId,
+      name,
+      request,
+      signal: context.signal,
+      run: () => selectRouteCandidate(request),
+    });
+  }
+
+  if (name === "replace_reminder_schedule") {
+    const cadence = readOptionalArray(args, "cadenceMinutes")?.map((value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        throw new Error("cadenceMinutes must contain only numbers.");
+      }
+      return numeric;
+    });
+    const request = {
+      tripId: readTripId(args, context),
+      userId: context.userId,
+      legId: readOptionalString(args, "legId"),
+      legOrder: readOptionalNumber(args, "legOrder"),
+      cadenceMinutes: cadence,
+    };
+    return recordToolCall({
+      agentSessionId: context.sessionId,
+      name,
+      request,
+      signal: context.signal,
+      run: () => replaceReminderSchedule(request),
+    });
+  }
+
+  if (name === "cancel_trip_monitoring") {
+    const request = {
+      tripId: readTripId(args, context),
+      userId: context.userId,
+    };
+    return recordToolCall({
+      agentSessionId: context.sessionId,
+      name,
+      request,
+      signal: context.signal,
+      run: () => cancelTripMonitoring(request),
+    });
+  }
+
+  if (name === "create_memory_candidate") {
+    const request = {
+      tripId: readOptionalString(args, "tripId") ?? context.tripId,
+      userId: context.userId,
+      kind: readString(args, "kind"),
+      label: readString(args, "label"),
+      valueJson: args.valueJson,
+    };
+    return recordToolCall({
+      agentSessionId: context.sessionId,
+      name,
+      request,
+      signal: context.signal,
+      run: () => createMemoryCandidateForTrip(request),
     });
   }
 
@@ -670,6 +1044,87 @@ function stringifyToolResult(result: unknown) {
 
     return value;
   });
+}
+
+async function runConversationAttempt(input: {
+  sessionId: string;
+  context: ToolExecutionContext;
+  settings: PlanningSettings;
+  messages: AgentChatMessage[];
+  chatClient: AgentChatClient;
+  signal?: AbortSignal;
+  requireCreateTrip: boolean;
+}) {
+  let latestTripId = input.context.tripId ?? null;
+
+  while (true) {
+    assertAgentRunActive(input.signal);
+    const completion = await input.chatClient.complete({
+      messages: input.messages,
+      tools: TOOL_DEFINITIONS,
+      signal: input.signal,
+    });
+    const assistantMessage = completion.message;
+    input.messages.push(assistantMessage);
+
+    await createAssistantMessage({
+      sessionId: input.sessionId,
+      signal: input.signal,
+      content: assistantMessage.content || "AI requested tool calls.",
+      metadata: {
+        toolCalls: assistantMessage.toolCalls?.map((toolCall) => ({
+          id: toolCall.id,
+          name: toolCall.name,
+        })),
+      },
+    });
+
+    const toolCalls = assistantMessage.toolCalls ?? [];
+    if (toolCalls.length === 0) {
+      if (input.requireCreateTrip) {
+        throw new Error("AI ended planning without calling create_trip.");
+      }
+
+      return {
+        tripId: latestTripId,
+        summary: assistantMessage.content,
+      };
+    }
+
+    for (const toolCall of toolCalls) {
+      assertAgentRunActive(input.signal);
+      const result = await executeToolCall(
+        toolCall,
+        input.context,
+        input.settings
+      );
+      input.messages.push({
+        role: "tool",
+        toolCallId: toolCall.id,
+        content: stringifyToolResult(result),
+      });
+
+      if (toolCall.name === "create_trip") {
+        const trip = result as { id: string };
+        latestTripId = trip.id;
+        input.context.tripId = trip.id;
+
+        if (input.requireCreateTrip) {
+          await createAssistantMessage({
+            sessionId: input.sessionId,
+            signal: input.signal,
+            content: "AI created the planned trip.",
+            metadata: { tripId: trip.id },
+          });
+
+          return {
+            tripId: trip.id,
+            summary: "AI completed the commute planning through tool calls.",
+          };
+        }
+      }
+    }
+  }
 }
 
 export async function startPlanningSession({
@@ -744,6 +1199,113 @@ export async function runPlanningSession(
   }
 }
 
+export async function continueAgentSession(
+  { userId, sessionId, message }: ContinueAgentSessionInput,
+  options: RunPlanningSessionOptions = {}
+): Promise<PlanningSessionResult> {
+  const normalizedMessage = normalizePrompt(message);
+  const session = await prisma.agentSession.findFirst({
+    where: { id: sessionId, userId },
+  });
+
+  if (!session) {
+    throw new Error("Agent session not found.");
+  }
+
+  await prisma.agentSession.update({
+    where: { id: sessionId },
+    data: {
+      status: "running",
+      messages: {
+        create: {
+          role: "user",
+          content: normalizedMessage,
+        },
+      },
+    },
+  });
+
+  try {
+    const result = await runWithTimeoutAndRetry({
+      timeoutMs: session.timeoutMs || SESSION_TIMEOUT_MS,
+      maxAttempts: SESSION_MAX_ATTEMPTS,
+      run: async ({ signal }) =>
+        runContinuationAttempt(sessionId, signal, options),
+    });
+
+    const completed = await prisma.agentSession.update({
+      where: { id: sessionId },
+      data: {
+        status: "completed",
+        retryCount: result.attempts - 1,
+        tripId: result.value.tripId,
+      },
+    });
+
+    return {
+      sessionId,
+      status: "completed",
+      tripId: completed.tripId,
+    };
+  } catch (error) {
+    const timedOut = error instanceof AgentRunTimeoutError;
+    const failed = await prisma.agentSession.update({
+      where: { id: sessionId },
+      data: {
+        status: timedOut ? "timed_out" : "failed",
+        messages: {
+          create: {
+            role: "assistant",
+            content: formatPlanningFailureMessage(error),
+          },
+        },
+      },
+    });
+
+    return {
+      sessionId,
+      status: timedOut ? "timed_out" : "failed",
+      tripId: failed.tripId,
+    };
+  }
+}
+
+async function runContinuationAttempt(
+  sessionId: string,
+  signal?: AbortSignal,
+  options: RunPlanningSessionOptions = {}
+): Promise<{ tripId: string | null; summary: string }> {
+  assertAgentRunActive(signal);
+  const session = await prisma.agentSession.findUniqueOrThrow({
+    where: { id: sessionId },
+  });
+  const settings = await loadPlanningSettings(session.userId);
+  const chatClient = options.chatClient ?? createOpenAiChatClient();
+  const context: ToolExecutionContext = {
+    amap: options.amapClient ?? createAmapClient(),
+    sessionId,
+    userId: session.userId,
+    prompt: session.prompt,
+    tripId: session.tripId,
+    signal,
+  };
+  const messages = await createContinuationMessages(session);
+  const result = await runConversationAttempt({
+    sessionId,
+    context,
+    settings,
+    messages,
+    chatClient,
+    signal,
+    requireCreateTrip: false,
+  });
+
+  return {
+    tripId: result.tripId ?? session.tripId,
+    summary: result.summary,
+  };
+}
+
 export async function runPlanningAttempt(
   sessionId: string,
   attempt = 1,
@@ -768,60 +1330,25 @@ export async function runPlanningAttempt(
   await createAssistantMessage({
     sessionId,
     signal,
-    content:
-      `第 ${attempt} 次规划：AI 将自主调用高德和行程工具，直到完成最终决策。`,
+    content: `Planning attempt ${attempt}: the AI may call tools until it creates the final trip.`,
   });
 
-  while (true) {
-    assertAgentRunActive(signal);
-    const completion = await chatClient.complete({
-      messages,
-      tools: TOOL_DEFINITIONS,
-      signal,
-    });
-    const assistantMessage = completion.message;
-    messages.push(assistantMessage);
+  const result = await runConversationAttempt({
+    sessionId,
+    context,
+    settings,
+    messages,
+    chatClient,
+    signal,
+    requireCreateTrip: true,
+  });
 
-    await createAssistantMessage({
-      sessionId,
-      signal,
-      content: assistantMessage.content || "AI 请求调用工具继续规划。",
-      metadata: {
-        toolCalls: assistantMessage.toolCalls?.map((toolCall) => ({
-          id: toolCall.id,
-          name: toolCall.name,
-        })),
-      },
-    });
-
-    const toolCalls = assistantMessage.toolCalls ?? [];
-    if (toolCalls.length === 0) {
-      throw new Error("AI 未调用 create_trip 就结束了规划。");
-    }
-
-    for (const toolCall of toolCalls) {
-      assertAgentRunActive(signal);
-      const result = await executeToolCall(toolCall, context, settings);
-      messages.push({
-        role: "tool",
-        toolCallId: toolCall.id,
-        content: stringifyToolResult(result),
-      });
-
-      if (toolCall.name === "create_trip") {
-        const trip = result as { id: string };
-        await createAssistantMessage({
-          sessionId,
-          signal,
-          content: `AI 已完成决策并创建行程。`,
-          metadata: { tripId: trip.id },
-        });
-
-        return {
-          tripId: trip.id,
-          summary: "AI 已通过工具调用完成通勤规划。",
-        };
-      }
-    }
+  if (!result.tripId) {
+    throw new Error("AI ended planning without creating a trip.");
   }
+
+  return {
+    tripId: result.tripId,
+    summary: result.summary,
+  };
 }

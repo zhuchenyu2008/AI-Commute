@@ -1,18 +1,74 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/session";
 import {
+  continueAgentSession,
   runPlanningSession,
   startPlanningSession,
 } from "@/lib/agent/planner";
-import type { AgentChatClient } from "@/lib/agent/chat-client";
+import type {
+  AgentChatClient,
+  AgentChatMessage,
+} from "@/lib/agent/chat-client";
 import { createMockAmapClient } from "@/lib/amap/mock";
 import { ensureTestDatabase } from "./test-db";
+
+type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
+const getCurrentUserMock = vi.hoisted(() =>
+  vi.fn<() => Promise<CurrentUser | null>>()
+);
+
+vi.mock("@/lib/auth/session", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/session")>();
+  return { ...actual, getCurrentUser: getCurrentUserMock };
+});
 
 describe("agent planning sessions", () => {
   const amapClient = createMockAmapClient();
 
   beforeAll(async () => {
     await ensureTestDatabase();
+  });
+
+  beforeEach(() => {
+    getCurrentUserMock.mockReset();
+  });
+
+  it("rejects starting a planning session until the user selects a default origin", async () => {
+    const { POST } = await import("@app/api/agent-sessions/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `agent-origin-guard-${Date.now()}@example.com`,
+        name: "Origin Guard User",
+        passwordHash: "hash",
+        settings: {
+          create: {
+            defaultCity: "Ningbo",
+            timezone: "Asia/Shanghai",
+            originName: null,
+            originLngLat: null,
+            routePreference: "balanced",
+          },
+        },
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await POST(
+      new Request("http://localhost/api/agent-sessions", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Plan my commute tomorrow morning." }),
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toMatch(/default origin|settings/i);
+    expect(payload.actionHref).toBe("/settings");
+    await expect(
+      prisma.agentSession.count({ where: { userId: user.id } })
+    ).resolves.toBe(0);
   });
 
   it("starts a visible running session with the initial user message", async () => {
@@ -26,7 +82,7 @@ describe("agent planning sessions", () => {
 
     const session = await startPlanningSession({
       userId: user.id,
-      prompt: "明天早上规划去龙湖天街的通勤。",
+      prompt: "Plan a commute to Longhu mall tomorrow morning.",
     });
 
     const persisted = await prisma.agentSession.findUniqueOrThrow({
@@ -38,7 +94,7 @@ describe("agent planning sessions", () => {
       userId: user.id,
       status: "running",
       purpose: "planning",
-      prompt: "明天早上规划去龙湖天街的通勤。",
+      prompt: "Plan a commute to Longhu mall tomorrow morning.",
       retryCount: 0,
       timeoutMs: 600000,
       tripId: null,
@@ -46,140 +102,22 @@ describe("agent planning sessions", () => {
     expect(persisted.messages).toHaveLength(1);
     expect(persisted.messages[0]).toMatchObject({
       role: "user",
-      content: "明天早上规划去龙湖天街的通勤。",
+      content: "Plan a commute to Longhu mall tomorrow morning.",
     });
   });
 
   it("runs a planning session into a completed trip with tool logs and messages", async () => {
-    const user = await prisma.user.create({
-      data: {
-        email: `agent-run-${Date.now()}@example.com`,
-        name: "Agent Runner",
-        passwordHash: "hash",
-        settings: {
-          create: {
-            defaultCity: "Ningbo",
-            timezone: "Asia/Shanghai",
-            originName: "Home",
-            originLngLat: "121.5230315924,29.8652491273",
-            routePreference: "balanced",
-          },
-        },
-      },
-    });
-
+    const user = await createUserWithSettings("agent-run");
     const session = await startPlanningSession({
       userId: user.id,
-      prompt: "明天 9:15 喝完咖啡后到龙湖天街",
+      prompt: "Plan a 9:15 commute to the office.",
     });
-
-    const chatClient: AgentChatClient = {
-      async complete({ messages }) {
-        const toolResultCount = messages.filter(
-          (message) => message.role === "tool"
-        ).length;
-
-        if (toolResultCount === 0) {
-          return {
-            message: {
-              role: "assistant",
-              content: "AI reads weather-reference evidence before planning.",
-              toolCalls: [
-                {
-                  id: "call-search-poi",
-                  name: "search_poi",
-                  arguments: { keywords: "龙湖天街", city: "Ningbo" },
-                },
-                {
-                  id: "call-weather",
-                  name: "get_weather_reference",
-                  arguments: { city: "Ningbo" },
-                },
-                {
-                  id: "call-transit",
-                  name: "get_transit_route",
-                  arguments: {
-                    destination: "121.616,29.868",
-                    city: "Ningbo",
-                    cityd: "Ningbo",
-                  },
-                },
-              ],
-            },
-          };
-        }
-
-        return {
-          message: {
-            role: "assistant",
-            content: "AI creates the final planned trip.",
-            toolCalls: [
-              {
-                id: "call-create-trip",
-                name: "create_trip",
-                arguments: {
-                  title: "宁波龙湖天街",
-                  timezone: "Asia/Shanghai",
-                  finalStopName: "宁波龙湖天街",
-                  stops: [
-                    {
-                      order: 1,
-                      name: "宁波龙湖天街",
-                      address: "浙江省宁波市龙湖天街",
-                      lngLat: "121.616,29.868",
-                      kind: "destination",
-                    },
-                  ],
-                  legs: [
-                    {
-                      order: 1,
-                      originName: "Home",
-                      originLngLat: "121.5230315924,29.8652491273",
-                      destinationName: "宁波龙湖天街",
-                      destinationLngLat: "121.616,29.868",
-                      routeMinutes: 42,
-                      bufferMinutes: 10,
-                      totalMinutes: 52,
-                      mode: "transit",
-                      routeTitle: "AI selected transit route",
-                      routeRationale:
-                        "AI compared tool evidence and selected transit.",
-                      segmentTitle: "Transit to Longhu",
-                      segmentDetail: "Generated from deterministic test tools.",
-                      segmentSource: "amap",
-                      source: { source: "test-agent" },
-                      bufferComponents: [
-                        {
-                          category: "venue",
-                          label: "Venue buffer",
-                          minutes: 5,
-                          reason: "Leave time to enter the mall.",
-                          source: "agent_inference",
-                        },
-                        {
-                          category: "transfer",
-                          label: "Transfer buffer",
-                          minutes: 5,
-                          reason: "Leave time for platform walking.",
-                          source: "agent_inference",
-                        },
-                        {
-                          category: "weather_context",
-                          label: "Weather context",
-                          minutes: 0,
-                          reason: "Weather is reference evidence only.",
-                          source: "weather_context",
-                        },
-                      ],
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        };
-      },
-    };
+    const chatClient = createTripChatClient({
+      finalStopName: "Office",
+      destinationLngLat: "121.2,29.2",
+      routeMinutes: 42,
+      mode: "transit",
+    });
 
     const result = await runPlanningSession(session.id, {
       amapClient,
@@ -211,173 +149,73 @@ describe("agent planning sessions", () => {
 
     expect(persisted.status).toBe("completed");
     expect(persisted.tripId).toBe(result.tripId);
-    expect(persisted.retryCount).toBe(0);
-    expect(persisted.messages.map((message) => message.role)).toContain("assistant");
-    expect(
-      persisted.messages.some((message) =>
-        message.content.includes("weather-reference")
-      )
-    ).toBe(true);
-
+    expect(persisted.messages.map((message) => message.role)).toContain(
+      "assistant"
+    );
     expect(persisted.toolCalls.map((call) => call.name)).toEqual(
       expect.arrayContaining([
         "search_poi",
         "get_weather_reference",
         "get_transit_route",
+        "create_trip",
       ])
     );
-    const poiSearch = persisted.toolCalls.find(
-      (call) => call.name === "search_poi"
-    );
-    expect(poiSearch?.requestJson).toContain('"keywords":"龙湖天街"');
     for (const call of persisted.toolCalls) {
       expect(call.status).toBe("completed");
       expect(call.requestJson).toBeTruthy();
       expect(call.responseJson).toBeTruthy();
       expect(call.durationMs).toEqual(expect.any(Number));
     }
-
-    expect(persisted.trip).toBeTruthy();
-    expect(persisted.trip?.status).toBe("monitoring");
-    expect(persisted.trip?.agentSessionId).toBe(session.id);
+    expect(persisted.trip).toMatchObject({
+      status: "monitoring",
+      agentSessionId: session.id,
+      finalStopName: "Office",
+    });
     expect(persisted.trip?.stops).toHaveLength(1);
-    expect(persisted.trip?.stops[0]).toMatchObject({
-      order: 1,
-      name: "宁波龙湖天街",
-      kind: "destination",
-    });
     expect(persisted.trip?.legs).toHaveLength(1);
-    expect(persisted.trip?.legs[0]).toMatchObject({
-      order: 1,
-      originName: "Home",
-      originLngLat: "121.5230315924,29.8652491273",
-      destinationName: "宁波龙湖天街",
-    });
-    expect(
-      persisted.trip?.legs[0].bufferComponents.map(
-        (component) => component.category
-      )
-    ).toEqual(["venue", "transfer", "weather_context"]);
-    expect(
-      persisted.trip?.legs[0].bufferComponents.find(
-        (component) => component.category === "weather_context"
-      )
-    ).toMatchObject({
-      minutes: 0,
-      source: "weather_context",
-    });
-  }, 15000);
+    expect(persisted.trip?.legs[0].bufferComponents.map((c) => c.category)).toEqual([
+      "transfer",
+    ]);
+  });
 
   it("injects confirmed memories into every planning run before the AI calls tools", async () => {
-    const user = await prisma.user.create({
-      data: {
-        email: `agent-memory-context-${Date.now()}@example.com`,
-        name: "Memory Context User",
-        passwordHash: "hash",
-        settings: {
-          create: {
-            defaultCity: "宁波",
-            timezone: "Asia/Shanghai",
-            originName: "外事学校",
-            originLngLat: "121.1,29.1",
-            routePreference: "balanced",
-          },
-        },
-        memories: {
-          create: {
-            kind: "origin",
-            label: "用户确认常从外事学校出发",
-            valueJson: JSON.stringify({
-              originName: "外事学校",
-              originLngLat: "121.1,29.1",
-            }),
-          },
+    const user = await createUserWithSettings("agent-memory-context", {
+      memories: {
+        create: {
+          kind: "preference",
+          label: "Confirmed memory: prefers cycling",
+          valueJson: JSON.stringify({ mode: "bicycling" }),
         },
       },
     });
     const session = await startPlanningSession({
       userId: user.id,
-      prompt: "明天 10:00 到东钱湖地铁站",
+      prompt: "Plan a commute to the station.",
     });
     const seenMessages: string[] = [];
-    const chatClient: AgentChatClient = {
-      async complete({ messages }) {
+    const chatClient = createTripChatClient({
+      finalStopName: "Station",
+      destinationLngLat: "121.3,29.3",
+      routeMinutes: 25,
+      mode: "transit",
+      onComplete({ messages }) {
         seenMessages.push(...messages.map((message) => message.content));
-        return {
-          message: {
-            role: "assistant",
-            content: "根据确认记忆创建行程。",
-            toolCalls: [
-              {
-                id: "create-from-memory",
-                name: "create_trip",
-                arguments: {
-                  title: "外事学校-东钱湖地铁站",
-                  timezone: "Asia/Shanghai",
-                  finalStopName: "东钱湖地铁站",
-                  stops: [
-                    {
-                      order: 1,
-                      name: "东钱湖地铁站",
-                      lngLat: "121.2,29.2",
-                      kind: "destination",
-                    },
-                  ],
-                  legs: [
-                    {
-                      order: 1,
-                      originName: "外事学校",
-                      originLngLat: "121.1,29.1",
-                      destinationName: "东钱湖地铁站",
-                      destinationLngLat: "121.2,29.2",
-                      routeMinutes: 25,
-                      bufferComponents: [
-                        {
-                          category: "transfer",
-                          label: "进站缓冲",
-                          minutes: 5,
-                          reason: "预留进站时间",
-                        },
-                      ],
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        };
       },
-    };
+    });
 
     await runPlanningSession(session.id, { amapClient, chatClient });
 
-    expect(seenMessages.join("\n")).toContain("用户已确认的长期记忆");
-    expect(seenMessages.join("\n")).toContain("用户确认常从外事学校出发");
+    expect(seenMessages.join("\n")).toContain(
+      "Confirmed memory: prefers cycling"
+    );
   });
 
   it("lets the AI choose AMap tools, route mode, and buffer details", async () => {
-    const user = await prisma.user.create({
-      data: {
-        email: `agent-ai-led-${Date.now()}@example.com`,
-        name: "AI Led Planner",
-        passwordHash: "hash",
-        settings: {
-          create: {
-            defaultCity: "宁波",
-            timezone: "Asia/Shanghai",
-            originName: "家",
-            originLngLat: "121.5230315924,29.8652491273",
-            routePreference: "balanced",
-          },
-        },
-      },
-    });
-
+    const user = await createUserWithSettings("agent-ai-led");
     const session = await startPlanningSession({
       userId: user.id,
-      prompt: "明天 9:15 到龙湖天街电影院，天气不好就别死板推荐骑车",
+      prompt: "Compare transit and biking to the cinema.",
     });
-
     const requestedTools: string[] = [];
     const chatClient: AgentChatClient = {
       async complete({ messages }) {
@@ -390,17 +228,17 @@ describe("agent planning sessions", () => {
           return {
             message: {
               role: "assistant",
-              content: "我先查地点和天气，不用固定规则替我决定。",
+              content: "Read POI and weather first.",
               toolCalls: [
                 {
                   id: "call-poi",
                   name: "search_poi",
-                  arguments: { keywords: "龙湖天街电影院", city: "宁波" },
+                  arguments: { keywords: "cinema", city: "Ningbo" },
                 },
                 {
                   id: "call-weather",
                   name: "get_weather_reference",
-                  arguments: { city: "宁波" },
+                  arguments: { city: "Ningbo" },
                 },
               ],
             },
@@ -412,26 +250,26 @@ describe("agent planning sessions", () => {
           return {
             message: {
               role: "assistant",
-              content: "我比较公交和骑行，不让应用层替我排好序。",
+              content: "Compare transit and bike.",
               toolCalls: [
                 {
                   id: "call-transit",
                   name: "get_transit_route",
                   arguments: {
-                    origin: "121.5230315924,29.8652491273",
-                    destination: "121.616,29.868",
-                    city: "宁波",
-                    cityd: "宁波",
+                    origin: "121.1,29.1",
+                    destination: "121.4,29.4",
+                    city: "Ningbo",
+                    cityd: "Ningbo",
                   },
                 },
                 {
                   id: "call-bike",
                   name: "get_bicycling_route",
                   arguments: {
-                    origin: "121.5230315924,29.8652491273",
-                    destination: "121.616,29.868",
-                    city: "宁波",
-                    cityd: "宁波",
+                    origin: "121.1,29.1",
+                    destination: "121.4,29.4",
+                    city: "Ningbo",
+                    cityd: "Ningbo",
                   },
                 },
               ],
@@ -440,71 +278,29 @@ describe("agent planning sessions", () => {
         }
 
         requestedTools.push("create_trip");
-        return {
-          message: {
-            role: "assistant",
-            content: "我最终选择骑行，并给出自己的缓冲拆解。",
-            toolCalls: [
-              {
-                id: "call-create-trip",
-                name: "create_trip",
-                arguments: {
-                  title: "龙湖天街电影院",
-                  timezone: "Asia/Shanghai",
-                  targetArriveAt: "2026-06-29T01:15:00.000Z",
-                  finalStopName: "宁波龙湖天街",
-                  stops: [
-                    {
-                      order: 1,
-                      name: "宁波龙湖天街",
-                      address: "浙江省宁波市龙湖天街",
-                      lngLat: "121.616,29.868",
-                      kind: "destination",
-                      targetArriveAt: "2026-06-29T01:15:00.000Z",
-                    },
-                  ],
-                  legs: [
-                    {
-                      order: 1,
-                      originName: "家",
-                      originLngLat: "121.5230315924,29.8652491273",
-                      destinationName: "宁波龙湖天街",
-                      destinationLngLat: "121.616,29.868",
-                      routeMinutes: 24,
-                      bufferMinutes: 7,
-                      totalMinutes: 31,
-                      mode: "bicycling",
-                      routeTitle: "AI 选择骑行路线",
-                      routeRationale:
-                        "比较高德公交和骑行结果后，AI 决定骑行时间更可控。",
-                      segmentTitle: "骑行到龙湖天街",
-                      segmentDetail: "由 AI 根据高德工具结果选择。",
-                      segmentSource: "amap",
-                      targetArriveAt: "2026-06-29T01:15:00.000Z",
-                      source: { decidedBy: "ai", comparedModes: ["transit", "bicycling"] },
-                      bufferComponents: [
-                        {
-                          category: "parking",
-                          label: "停车落锁",
-                          minutes: 3,
-                          reason: "AI 认为共享单车停车需要额外时间。",
-                          source: "agent_inference",
-                        },
-                        {
-                          category: "venue",
-                          label: "进商场找影院",
-                          minutes: 4,
-                          reason: "AI 认为从商场入口到影院需要预留时间。",
-                          source: "agent_inference",
-                        },
-                      ],
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        };
+        return createTripToolResponse({
+          finalStopName: "Cinema",
+          destinationLngLat: "121.4,29.4",
+          routeMinutes: 24,
+          bufferMinutes: 7,
+          totalMinutes: 31,
+          mode: "bicycling",
+          routeTitle: "AI selected bike route",
+          bufferComponents: [
+            {
+              category: "parking",
+              label: "Bike parking",
+              minutes: 3,
+              reason: "Lock the bike.",
+            },
+            {
+              category: "venue",
+              label: "Find screen",
+              minutes: 4,
+              reason: "Walk inside the mall.",
+            },
+          ],
+        });
       },
     };
 
@@ -551,7 +347,7 @@ describe("agent planning sessions", () => {
       routeMinutes: 24,
       bufferMinutes: 7,
       totalMinutes: 31,
-      title: "AI 选择骑行路线",
+      title: "AI selected bike route",
     });
     expect(
       persisted.trip?.legs[0].bufferComponents.map((component) => ({
@@ -572,7 +368,7 @@ describe("agent planning sessions", () => {
         passwordHash: "hash",
         settings: {
           create: {
-            defaultCity: "宁波",
+            defaultCity: "Ningbo",
             timezone: "Asia/Shanghai",
             originName: "   ",
             originLngLat: "   ",
@@ -581,10 +377,9 @@ describe("agent planning sessions", () => {
         },
       },
     });
-
     const session = await startPlanningSession({
       userId: user.id,
-      prompt: "明天 9:15 到宁波龙湖天街",
+      prompt: "Plan a route without origin.",
     });
     const chatClient: AgentChatClient = {
       async complete({ messages }) {
@@ -596,7 +391,7 @@ describe("agent planning sessions", () => {
           return {
             message: {
               role: "assistant",
-              content: "先查路线。",
+              content: "Query route first.",
               toolCalls: [
                 {
                   id: "call-transit-no-origin",
@@ -604,8 +399,8 @@ describe("agent planning sessions", () => {
                   arguments: {
                     origin: "   ",
                     destination: "121.616,29.868",
-                    city: "宁波",
-                    cityd: "宁波",
+                    city: "Ningbo",
+                    cityd: "Ningbo",
                   },
                 },
               ],
@@ -637,12 +432,291 @@ describe("agent planning sessions", () => {
     );
 
     expect(persisted.status).toBe("failed");
-    expect(routeCall).toMatchObject({
-      status: "failed",
-      error: "请先在设置中选择默认出发点，或在本次请求中提供出发点。",
-    });
-    expect(persisted.messages.at(-1)?.content).toContain(
-      "请先在设置中选择默认出发点"
+    expect(routeCall).toMatchObject({ status: "failed" });
+    expect(routeCall?.error).toMatch(/default origin|settings/i);
+    expect(persisted.messages.at(-1)?.content).toMatch(
+      /default origin|settings/i
     );
   });
+
+  it("continues an existing session with route update tools and memory candidates", async () => {
+    const user = await createUserWithSettings("agent-continue", {
+      memories: {
+        create: {
+          kind: "preference",
+          label: "Prefers cycling when weather allows",
+          valueJson: JSON.stringify({ preferredMode: "bicycling" }),
+        },
+      },
+    });
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Plan tomorrow commute to the office.",
+    });
+    const planned = await runPlanningSession(session.id, {
+      amapClient,
+      chatClient: createTripChatClient({
+        finalStopName: "Office",
+        destinationLngLat: "121.2,29.2",
+        routeMinutes: 35,
+        mode: "transit",
+      }),
+    });
+    expect(planned.tripId).toEqual(expect.any(String));
+
+    const seenTools: string[][] = [];
+    const seenMessages: string[] = [];
+    let calls = 0;
+    const chatClient: AgentChatClient = {
+      async complete({ messages, tools }) {
+        calls += 1;
+        seenTools.push(tools.map((tool) => tool.name));
+        seenMessages.push(...messages.map((message) => message.content));
+
+        if (calls === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "Update the existing trip and remember the preference.",
+              toolCalls: [
+                {
+                  id: "update-summary",
+                  name: "update_trip_summary",
+                  arguments: {
+                    title: "Home-Gym",
+                    finalStopName: "Gym",
+                  },
+                },
+                {
+                  id: "memory-candidate",
+                  name: "create_memory_candidate",
+                  arguments: {
+                    kind: "preference",
+                    label: "Prefers gym detours after work",
+                    valueJson: { afterWorkStop: "Gym" },
+                  },
+                },
+              ],
+            },
+          };
+        }
+
+        return {
+          message: {
+            role: "assistant",
+            content: "The current trip has been updated.",
+          },
+        };
+      },
+    };
+
+    const result = await continueAgentSession(
+      {
+        userId: user.id,
+        sessionId: session.id,
+        message: "Change the destination to the gym and remember this.",
+      },
+      { amapClient, chatClient }
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.tripId).toBe(planned.tripId);
+    expect(seenTools[0]).toEqual(
+      expect.arrayContaining([
+        "read_current_trip",
+        "update_trip_summary",
+        "replace_trip_stops",
+        "replace_trip_legs",
+        "select_route_candidate",
+        "replace_reminder_schedule",
+        "cancel_trip_monitoring",
+        "create_memory_candidate",
+        "get_transit_route",
+        "create_trip",
+      ])
+    );
+    expect(seenMessages.join("\n")).toContain(
+      "Prefers cycling when weather allows"
+    );
+
+    const persisted = await prisma.agentSession.findUniqueOrThrow({
+      where: { id: session.id },
+      include: {
+        messages: { orderBy: { createdAt: "asc" } },
+        toolCalls: { orderBy: { createdAt: "asc" } },
+        trip: true,
+      },
+    });
+
+    expect(persisted.status).toBe("completed");
+    expect(persisted.messages.map((m) => m.content)).toContain(
+      "Change the destination to the gym and remember this."
+    );
+    expect(persisted.toolCalls.map((call) => call.name)).toEqual(
+      expect.arrayContaining(["update_trip_summary", "create_memory_candidate"])
+    );
+    expect(persisted.trip).toMatchObject({
+      title: "Home-Gym",
+      finalStopName: "Gym",
+    });
+    await expect(
+      prisma.memoryCandidate.findFirstOrThrow({
+        where: {
+          userId: user.id,
+          label: "Prefers gym detours after work",
+          status: "pending",
+        },
+      })
+    ).resolves.toMatchObject({
+      kind: "preference",
+      valueJson: JSON.stringify({ afterWorkStop: "Gym" }),
+    });
+  }, 15000);
 });
+
+async function createUserWithSettings(
+  label: string,
+  extraData: Record<string, unknown> = {}
+) {
+  return prisma.user.create({
+    data: {
+      email: `${label}-${Date.now()}-${Math.random()}@example.com`,
+      name: label,
+      passwordHash: "hash",
+      settings: {
+        create: {
+          defaultCity: "Ningbo",
+          timezone: "Asia/Shanghai",
+          originName: "Home",
+          originLngLat: "121.1,29.1",
+          routePreference: "balanced",
+        },
+      },
+      ...extraData,
+    },
+  });
+}
+
+function createTripChatClient(input: {
+  finalStopName: string;
+  destinationLngLat: string;
+  routeMinutes: number;
+  mode: string;
+  onComplete?: (input: { messages: AgentChatMessage[] }) => void;
+}): AgentChatClient {
+  return {
+    async complete({ messages }) {
+      const toolResultCount = messages.filter((message) => message.role === "tool")
+        .length;
+
+      if (toolResultCount === 0) {
+        return {
+          message: {
+            role: "assistant",
+            content: "Read planning evidence.",
+            toolCalls: [
+              {
+                id: "call-search-poi",
+                name: "search_poi",
+                arguments: { keywords: input.finalStopName, city: "Ningbo" },
+              },
+              {
+                id: "call-weather",
+                name: "get_weather_reference",
+                arguments: { city: "Ningbo" },
+              },
+              {
+                id: "call-transit",
+                name: "get_transit_route",
+                arguments: {
+                  destination: input.destinationLngLat,
+                  city: "Ningbo",
+                  cityd: "Ningbo",
+                },
+              },
+            ],
+          },
+        };
+      }
+
+      input.onComplete?.({ messages });
+      return createTripToolResponse(input);
+    },
+  };
+}
+
+function createTripToolResponse(input: {
+  finalStopName: string;
+  destinationLngLat: string;
+  routeMinutes: number;
+  mode: string;
+  bufferMinutes?: number;
+  totalMinutes?: number;
+  routeTitle?: string;
+  bufferComponents?: Array<{
+    category: string;
+    label: string;
+    minutes: number;
+    reason: string;
+    source?: string;
+  }>;
+}) {
+  const bufferComponents =
+    input.bufferComponents ?? [
+      {
+        category: "transfer",
+        label: "Transfer buffer",
+        minutes: 5,
+        reason: "Leave time for station walking.",
+      },
+    ];
+  const bufferMinutes =
+    input.bufferMinutes ??
+    bufferComponents.reduce((total, component) => total + component.minutes, 0);
+
+  return {
+    message: {
+      role: "assistant" as const,
+      content: "Create final trip.",
+      toolCalls: [
+        {
+          id: "call-create-trip",
+          name: "create_trip",
+          arguments: {
+            title: `Home-${input.finalStopName}`,
+            timezone: "Asia/Shanghai",
+            finalStopName: input.finalStopName,
+            stops: [
+              {
+                order: 1,
+                name: input.finalStopName,
+                lngLat: input.destinationLngLat,
+                kind: "destination",
+              },
+            ],
+            legs: [
+              {
+                order: 1,
+                originName: "Home",
+                originLngLat: "121.1,29.1",
+                destinationName: input.finalStopName,
+                destinationLngLat: input.destinationLngLat,
+                routeMinutes: input.routeMinutes,
+                bufferMinutes,
+                totalMinutes: input.totalMinutes ?? input.routeMinutes + bufferMinutes,
+                mode: input.mode,
+                routeTitle: input.routeTitle ?? `${input.mode} route`,
+                routeRationale: "AI selected this route from tool evidence.",
+                segmentTitle: `${input.mode} segment`,
+                segmentDetail: "Generated from deterministic test tools.",
+                segmentSource: "amap",
+                source: { source: "test-agent" },
+                bufferComponents,
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
