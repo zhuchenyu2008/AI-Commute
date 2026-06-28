@@ -3,7 +3,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import {
   AgentSessionAlreadyRunningError,
   AgentSessionNotFoundError,
-  continueAgentSession,
+  acceptAgentSessionMessage,
+  runAcceptedContinuationSession,
 } from "@/lib/agent/planner";
 import { prisma } from "@/lib/db";
 
@@ -31,26 +32,28 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const session = await prisma.agentSession.findFirst({
-    where: { id: sessionId, userId: user.id },
-  });
+  try {
+    await acceptAgentSessionMessage({
+      userId: user.id,
+      sessionId,
+      message,
+    });
+  } catch (error) {
+    if (error instanceof AgentSessionNotFoundError) {
+      return NextResponse.json({ error: "未找到智能体会话" }, { status: 404 });
+    }
 
-  if (!session) {
-    return NextResponse.json({ error: "未找到智能体会话" }, { status: 404 });
+    if (error instanceof AgentSessionAlreadyRunningError) {
+      return NextResponse.json(
+        { error: "智能体会话正在运行，请稍后再发送消息" },
+        { status: 409 }
+      );
+    }
+
+    throw error;
   }
 
-  if (session.status === "running") {
-    return NextResponse.json(
-      { error: "智能体会话正在运行，请稍后再发送消息" },
-      { status: 409 }
-    );
-  }
-
-  void continueAgentSession({
-    userId: user.id,
-    sessionId,
-    message,
-  }).catch(async (error) => {
+  void runAcceptedContinuationSession(sessionId).catch(async (error) => {
     if (
       error instanceof AgentSessionNotFoundError ||
       error instanceof AgentSessionAlreadyRunningError

@@ -2,7 +2,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
+  acceptAgentSessionMessage,
   continueAgentSession,
+  runAcceptedContinuationSession,
   runPlanningSession,
   startPlanningSession,
 } from "@/lib/agent/planner";
@@ -216,6 +218,123 @@ describe("agent planning sessions", () => {
         where: { agentSessionId: session.id, role: "user" },
       })
     ).resolves.toBe(beforeMessages);
+  });
+
+  it("accepts a continuation message before running and rejects a second accept", async () => {
+    const user = await createUserWithSettings("agent-service-accept");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Accept this session later.",
+    });
+    await prisma.agentSession.update({
+      where: { id: session.id },
+      data: { status: "completed" },
+    });
+
+    const accepted = await acceptAgentSessionMessage({
+      userId: user.id,
+      sessionId: session.id,
+      message: "Persist me before background work.",
+    });
+
+    expect(accepted).toMatchObject({
+      id: session.id,
+      status: "running",
+    });
+    await expect(
+      prisma.agentMessage.count({
+        where: { agentSessionId: session.id, role: "user" },
+      })
+    ).resolves.toBe(2);
+    await expect(
+      acceptAgentSessionMessage({
+        userId: user.id,
+        sessionId: session.id,
+        message: "Do not persist a second message.",
+      })
+    ).rejects.toThrow(/running|already/i);
+    await expect(
+      prisma.agentMessage.count({
+        where: { agentSessionId: session.id, role: "user" },
+      })
+    ).resolves.toBe(2);
+  });
+
+  it("keeps an accepted message when continuation running fails later", async () => {
+    const user = await createUserWithSettings("agent-accepted-failure");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Accept then fail this session.",
+    });
+    await prisma.agentSession.update({
+      where: { id: session.id },
+      data: { status: "completed" },
+    });
+
+    await acceptAgentSessionMessage({
+      userId: user.id,
+      sessionId: session.id,
+      message: "This message should survive the failed run.",
+    });
+    const result = await runAcceptedContinuationSession(session.id, {
+      amapClient,
+      chatClient: {
+        async complete() {
+          throw new Error("forced continuation failure");
+        },
+      },
+    });
+
+    expect(result.status).toBe("failed");
+    const persisted = await prisma.agentSession.findUniqueOrThrow({
+      where: { id: session.id },
+      include: { messages: { orderBy: { createdAt: "asc" } } },
+    });
+    expect(persisted.status).toBe("failed");
+    expect(persisted.messages.map((message) => message.content)).toContain(
+      "This message should survive the failed run."
+    );
+    expect(persisted.messages.at(-1)?.content).toContain(
+      "forced continuation failure"
+    );
+  });
+
+  it("returns 202 only after the continuation message is accepted", async () => {
+    const { POST } = await import(
+      "@app/api/agent-sessions/[sessionId]/messages/route"
+    );
+    const user = await createUserWithSettings("agent-message-accepted");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Accept through API.",
+    });
+    await prisma.agentSession.update({
+      where: { id: session.id },
+      data: { status: "completed" },
+    });
+    const currentUser = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(currentUser);
+
+    const response = await POST(
+      new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({ message: "API accepted message" }),
+      }),
+      { params: Promise.resolve({ sessionId: session.id }) }
+    );
+
+    expect(response.status).toBe(202);
+    const persisted = await prisma.agentSession.findUniqueOrThrow({
+      where: { id: session.id },
+      include: { messages: { orderBy: { createdAt: "asc" } } },
+    });
+    expect(persisted.status).toBe("running");
+    expect(persisted.messages.map((message) => message.content)).toContain(
+      "API accepted message"
+    );
   });
 
   it("runs a planning session into a completed trip with tool logs and messages", async () => {

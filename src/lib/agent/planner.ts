@@ -1219,35 +1219,62 @@ export async function runPlanningSession(
 }
 
 export async function continueAgentSession(
-  { userId, sessionId, message }: ContinueAgentSessionInput,
+  input: ContinueAgentSessionInput,
   options: RunPlanningSessionOptions = {}
 ): Promise<PlanningSessionResult> {
+  const accepted = await acceptAgentSessionMessage(input);
+  return runAcceptedContinuationSession(accepted.id, options);
+}
+
+export async function acceptAgentSessionMessage({
+  userId,
+  sessionId,
+  message,
+}: ContinueAgentSessionInput) {
   const normalizedMessage = normalizePrompt(message);
-  const session = await prisma.$transaction(async (tx) => {
-    const existing = await tx.agentSession.findFirst({
-      where: { id: sessionId, userId },
+
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.agentSession.updateMany({
+      where: {
+        id: sessionId,
+        userId,
+        status: { not: "running" },
+      },
+      data: { status: "running" },
     });
 
-    if (!existing) {
-      throw new AgentSessionNotFoundError();
-    }
+    if (claimed.count !== 1) {
+      const existing = await tx.agentSession.findFirst({
+        where: { id: sessionId, userId },
+      });
 
-    if (existing.status === "running") {
+      if (!existing) {
+        throw new AgentSessionNotFoundError();
+      }
+
       throw new AgentSessionAlreadyRunningError();
     }
 
-    return tx.agentSession.update({
-      where: { id: sessionId },
+    await tx.agentMessage.create({
       data: {
-        status: "running",
-        messages: {
-          create: {
-            role: "user",
-            content: normalizedMessage,
-          },
-        },
+        agentSessionId: sessionId,
+        role: "user",
+        content: normalizedMessage,
       },
     });
+
+    return tx.agentSession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+  });
+}
+
+export async function runAcceptedContinuationSession(
+  sessionId: string,
+  options: RunPlanningSessionOptions = {}
+): Promise<PlanningSessionResult> {
+  const session = await prisma.agentSession.findUniqueOrThrow({
+    where: { id: sessionId },
   });
 
   try {
