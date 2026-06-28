@@ -587,7 +587,7 @@ async function executeToolCall(
     name === "get_bicycling_route"
   ) {
     const request = {
-      origin: readString(args, "origin", settings.originLngLat),
+      origin: readOptionalString(args, "origin") ?? settings.originLngLat,
       destination: readString(args, "destination"),
       city: readOptionalString(args, "city") ?? settings.defaultCity,
       cityd: readOptionalString(args, "cityd") ?? settings.defaultCity,
@@ -604,7 +604,15 @@ async function executeToolCall(
       name,
       request,
       signal: context.signal,
-      run: route,
+      run: async () => {
+        if (!request.origin) {
+          throw new Error(
+            "请先在设置中选择默认出发点，或在本次请求中提供出发点。"
+          );
+        }
+
+        return route();
+      },
     });
   }
 
