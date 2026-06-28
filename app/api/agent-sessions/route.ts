@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Please select a default origin in settings before starting a planning session.",
+          "请先在设置中选择默认出发点，再开始智能体规划。",
         actionHref: "/settings",
       },
       { status: 400 }

@@ -41,7 +41,7 @@ import type {
 const SESSION_TIMEOUT_MS = 600000;
 const SESSION_MAX_ATTEMPTS = 2;
 const ORIGIN_REQUIRED_MESSAGE =
-  "Please select a default origin in settings, or provide an origin for this route request.";
+  "请先在设置中选择默认出发点，或在本次请求中提供出发点。";
 
 export { AgentRunTimeoutError };
 
@@ -97,7 +97,7 @@ function normalizePlanningSettings(settings: {
 function normalizePrompt(prompt: string) {
   const trimmed = prompt.trim();
   if (!trimmed) {
-    throw new Error("Please enter a commute planning request.");
+    throw new Error("请输入通勤规划需求。");
   }
 
   return trimmed;
@@ -105,24 +105,24 @@ function normalizePrompt(prompt: string) {
 
 export function formatPlanningFailureMessage(error: unknown) {
   if (error instanceof AgentRunTimeoutError) {
-    return "Planning failed: the agent run timed out. Please try again.";
+    return "规划失败：智能体规划超时，请稍后重试。";
   }
 
   if (error instanceof Error) {
     const knownMessages: Record<string, string> = {
-      "Agent run aborted.": "Planning failed: the agent run was aborted.",
+      "Agent run aborted.": "规划失败：智能体运行已中止。",
       "timeoutMs must be greater than zero.":
-        "Planning failed: invalid internal timeout configuration.",
+        "规划失败：内部运行超时配置无效。",
       "maxAttempts must be greater than zero.":
-        "Planning failed: invalid internal retry configuration.",
+        "规划失败：内部重试配置无效。",
       "Agent planning failed after all attempts.":
-        "Planning failed after multiple attempts. Please try again.",
+        "规划失败：多次尝试后仍未完成，请稍后重试。",
     };
 
-    return knownMessages[error.message] ?? `Planning failed: ${error.message}`;
+    return knownMessages[error.message] ?? `规划失败：${error.message}`;
   }
 
-  return "Planning failed. Please try again.";
+  return "规划失败：请稍后重试。";
 }
 
 async function createAssistantMessage(input: {
@@ -1098,6 +1098,11 @@ async function runConversationAttempt(input: {
         input.context,
         input.settings
       );
+      const explicitTripId = readOptionalString(toolCall.arguments, "tripId");
+      latestTripId = input.context.tripId ?? explicitTripId ?? latestTripId;
+      if (explicitTripId) {
+        input.context.tripId = explicitTripId;
+      }
       input.messages.push({
         role: "tool",
         toolCallId: toolCall.id,

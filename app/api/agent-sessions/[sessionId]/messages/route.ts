@@ -12,7 +12,7 @@ export async function POST(request: Request, context: RouteContext) {
   const user = await getCurrentUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    return NextResponse.json({ error: "请先登录" }, { status: 401 });
   }
 
   const { sessionId } = await context.params;
@@ -21,7 +21,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   if (!message) {
     return NextResponse.json(
-      { error: "Please enter a message." },
+      { error: "请输入要发送给智能体的消息" },
       { status: 400 }
     );
   }

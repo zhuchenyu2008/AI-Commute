@@ -11,6 +11,7 @@ import type {
   AgentChatMessage,
 } from "@/lib/agent/chat-client";
 import { createMockAmapClient } from "@/lib/amap/mock";
+import { createPlannedTrip } from "@/lib/trips/create-trip";
 import { ensureTestDatabase } from "./test-db";
 
 type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
@@ -64,7 +65,7 @@ describe("agent planning sessions", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(payload.error).toMatch(/default origin|settings/i);
+    expect(payload.error).toMatch(/默认出发点|设置/);
     expect(payload.actionHref).toBe("/settings");
     await expect(
       prisma.agentSession.count({ where: { userId: user.id } })
@@ -103,6 +104,37 @@ describe("agent planning sessions", () => {
     expect(persisted.messages[0]).toMatchObject({
       role: "user",
       content: "Plan a commute to Longhu mall tomorrow morning.",
+    });
+  });
+
+  it("returns continuation metadata from the session detail endpoint", async () => {
+    const { GET } = await import("@app/api/agent-sessions/[sessionId]/route");
+    const user = await createUserWithSettings("agent-session-detail");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Plan a commute with session detail.",
+    });
+    await prisma.agentSession.update({
+      where: { id: session.id },
+      data: { status: "completed" },
+    });
+    const currentUser = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(currentUser);
+
+    const response = await GET(new Request("http://localhost"), {
+      params: Promise.resolve({ sessionId: session.id }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.session).toMatchObject({
+      id: session.id,
+      canContinue: true,
+      hasTrip: false,
+      messageHref: `/api/agent-sessions/${session.id}/messages`,
     });
   });
 
@@ -433,9 +465,9 @@ describe("agent planning sessions", () => {
 
     expect(persisted.status).toBe("failed");
     expect(routeCall).toMatchObject({ status: "failed" });
-    expect(routeCall?.error).toMatch(/default origin|settings/i);
+    expect(routeCall?.error).toMatch(/默认出发点|设置/);
     expect(persisted.messages.at(-1)?.content).toMatch(
-      /default origin|settings/i
+      /默认出发点|设置/
     );
   });
 
@@ -572,6 +604,108 @@ describe("agent planning sessions", () => {
       valueJson: JSON.stringify({ afterWorkStop: "Gym" }),
     });
   }, 15000);
+
+  it("persists an explicit trip id used by continuation route update tools", async () => {
+    const user = await createUserWithSettings("agent-explicit-trip");
+    const trip = await createPlannedTrip({
+      userId: user.id,
+      rawPrompt: "Existing trip created outside the agent session.",
+      timezone: "Asia/Shanghai",
+      title: "Home-Office",
+      finalStopName: "Office",
+      stops: [
+        {
+          order: 1,
+          name: "Office",
+          lngLat: "121.2,29.2",
+          kind: "destination",
+        },
+      ],
+      legs: [
+        {
+          order: 1,
+          originName: "Home",
+          originLngLat: "121.1,29.1",
+          destinationName: "Office",
+          destinationLngLat: "121.2,29.2",
+          routeMinutes: 30,
+          bufferComponents: [
+            {
+              category: "transfer",
+              label: "Transfer",
+              minutes: 5,
+              reason: "Leave time for transfer.",
+            },
+          ],
+        },
+      ],
+    });
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Continue against an explicitly selected trip.",
+    });
+
+    const chatClient: AgentChatClient = {
+      async complete({ messages }) {
+        const toolResultCount = messages.filter(
+          (message) => message.role === "tool"
+        ).length;
+
+        if (toolResultCount === 0) {
+          return {
+            message: {
+              role: "assistant",
+              content: "Update explicit trip.",
+              toolCalls: [
+                {
+                  id: "explicit-summary",
+                  name: "update_trip_summary",
+                  arguments: {
+                    tripId: trip.id,
+                    title: "Home-Library",
+                    finalStopName: "Library",
+                  },
+                },
+              ],
+            },
+          };
+        }
+
+        return {
+          message: {
+            role: "assistant",
+            content: "Explicit trip updated.",
+          },
+        };
+      },
+    };
+
+    const result = await continueAgentSession(
+      {
+        userId: user.id,
+        sessionId: session.id,
+        message: "Use this explicit trip id.",
+      },
+      { amapClient, chatClient }
+    );
+
+    expect(result).toMatchObject({
+      status: "completed",
+      tripId: trip.id,
+    });
+    await expect(
+      prisma.agentSession.findUniqueOrThrow({ where: { id: session.id } })
+    ).resolves.toMatchObject({
+      tripId: trip.id,
+      status: "completed",
+    });
+    await expect(
+      prisma.trip.findUniqueOrThrow({ where: { id: trip.id } })
+    ).resolves.toMatchObject({
+      title: "Home-Library",
+      finalStopName: "Library",
+    });
+  });
 });
 
 async function createUserWithSettings(
