@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { createPlannedTrip } from "@/lib/trips/create-trip";
 import {
+  createMemoryCandidateForTrip,
+  replaceReminderSchedule,
   replaceTripRoute,
   updateTripSummary,
 } from "@/lib/trips/route-updates";
@@ -198,6 +200,15 @@ describe("route update helpers", () => {
       original.stops.map((stop) => stop.id)
     );
     expect(updated.legs).toHaveLength(2);
+    expect(
+      updated.legs.map((leg) => ({
+        from: updated.stops.find((stop) => stop.id === leg.fromStopId)?.name,
+        to: updated.stops.find((stop) => stop.id === leg.toStopId)?.name,
+      }))
+    ).toEqual([
+      { from: "Home", to: "Cafe" },
+      { from: "Cafe", to: "Gym" },
+    ]);
     expect(updated.legs.map((leg) => leg.destinationName)).toEqual([
       "Cafe",
       "Gym",
@@ -233,5 +244,124 @@ describe("route update helpers", () => {
         original.reminderJobs.some((oldJob) => oldJob.id === job.id)
       )
     ).toBe(false);
+  });
+
+  it("deduplicates and normalizes replacement reminder cadence minutes", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `route-cadence-${Date.now()}@example.com`,
+        name: "Route Cadence User",
+        passwordHash: "hash",
+      },
+    });
+    const latestDepartAt = new Date("2026-07-03T01:00:00.000Z");
+    const trip = await createPlannedTrip({
+      userId: user.id,
+      rawPrompt: "Cadence commute.",
+      timezone: "Asia/Shanghai",
+      title: "Home-Office",
+      finalStopName: "Office",
+      stops: [
+        {
+          order: 1,
+          name: "Office",
+          lngLat: "121.2,29.2",
+          kind: "destination",
+        },
+      ],
+      legs: [
+        {
+          order: 1,
+          originName: "Home",
+          originLngLat: "121.1,29.1",
+          destinationName: "Office",
+          destinationLngLat: "121.2,29.2",
+          routeMinutes: 30,
+          latestDepartAt,
+          bufferComponents: [
+            {
+              category: "transfer",
+              label: "Transfer",
+              minutes: 5,
+              reason: "Leave time for transfer.",
+            },
+          ],
+        },
+      ],
+    });
+
+    const reminders = await replaceReminderSchedule({
+      tripId: trip.id,
+      userId: user.id,
+      cadenceMinutes: [10, 10, 0, 5.7],
+    });
+
+    expect(reminders).toHaveLength(3);
+    expect(reminders.map((job) => JSON.parse(job.payloadJson))).toEqual([
+      expect.objectContaining({ minutesBeforeDeparture: 10 }),
+      expect.objectContaining({ minutesBeforeDeparture: 6 }),
+      expect.objectContaining({ minutesBeforeDeparture: 0 }),
+    ]);
+    expect(new Set(reminders.map((job) => job.dedupeKey)).size).toBe(3);
+  });
+
+  it("rejects invalid reminder cadence and undefined memory candidate values clearly", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `route-invalid-${Date.now()}@example.com`,
+        name: "Route Invalid User",
+        passwordHash: "hash",
+      },
+    });
+    const trip = await createPlannedTrip({
+      userId: user.id,
+      rawPrompt: "Invalid helper commute.",
+      timezone: "Asia/Shanghai",
+      title: "Home-Office",
+      finalStopName: "Office",
+      stops: [
+        {
+          order: 1,
+          name: "Office",
+          lngLat: "121.2,29.2",
+          kind: "destination",
+        },
+      ],
+      legs: [
+        {
+          order: 1,
+          originName: "Home",
+          originLngLat: "121.1,29.1",
+          destinationName: "Office",
+          destinationLngLat: "121.2,29.2",
+          routeMinutes: 30,
+          bufferComponents: [
+            {
+              category: "transfer",
+              label: "Transfer",
+              minutes: 5,
+              reason: "Leave time for transfer.",
+            },
+          ],
+        },
+      ],
+    });
+
+    await expect(
+      replaceReminderSchedule({
+        tripId: trip.id,
+        userId: user.id,
+        cadenceMinutes: [10, -1],
+      })
+    ).rejects.toThrow(/cadence/i);
+    await expect(
+      createMemoryCandidateForTrip({
+        tripId: trip.id,
+        userId: user.id,
+        kind: "preference",
+        label: "Undefined memory",
+        valueJson: undefined,
+      })
+    ).rejects.toThrow(/valueJson/i);
   });
 });

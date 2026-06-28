@@ -138,6 +138,86 @@ describe("agent planning sessions", () => {
     });
   });
 
+  it("rejects continuation messages for missing, foreign, or running sessions", async () => {
+    const { POST } = await import(
+      "@app/api/agent-sessions/[sessionId]/messages/route"
+    );
+    const user = await createUserWithSettings("agent-message-owner");
+    const otherUser = await createUserWithSettings("agent-message-other");
+    const foreignSession = await startPlanningSession({
+      userId: otherUser.id,
+      prompt: "Foreign session.",
+    });
+    const runningSession = await startPlanningSession({
+      userId: user.id,
+      prompt: "Already running session.",
+    });
+    const currentUser = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(currentUser);
+
+    const missingResponse = await POST(
+      new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({ message: "hello" }),
+      }),
+      { params: Promise.resolve({ sessionId: "missing-session" }) }
+    );
+    expect(missingResponse.status).toBe(404);
+
+    const foreignResponse = await POST(
+      new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({ message: "hello" }),
+      }),
+      { params: Promise.resolve({ sessionId: foreignSession.id }) }
+    );
+    expect(foreignResponse.status).toBe(404);
+
+    const beforeMessages = await prisma.agentMessage.count({
+      where: { agentSessionId: runningSession.id, role: "user" },
+    });
+    const runningResponse = await POST(
+      new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({ message: "do not append" }),
+      }),
+      { params: Promise.resolve({ sessionId: runningSession.id }) }
+    );
+    expect(runningResponse.status).toBe(409);
+    await expect(
+      prisma.agentMessage.count({
+        where: { agentSessionId: runningSession.id, role: "user" },
+      })
+    ).resolves.toBe(beforeMessages);
+  });
+
+  it("service rejects continuing a running session without appending a user message", async () => {
+    const user = await createUserWithSettings("agent-service-running");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Already running service session.",
+    });
+    const beforeMessages = await prisma.agentMessage.count({
+      where: { agentSessionId: session.id, role: "user" },
+    });
+
+    await expect(
+      continueAgentSession({
+        userId: user.id,
+        sessionId: session.id,
+        message: "should be rejected",
+      })
+    ).rejects.toThrow(/running|already/i);
+    await expect(
+      prisma.agentMessage.count({
+        where: { agentSessionId: session.id, role: "user" },
+      })
+    ).resolves.toBe(beforeMessages);
+  });
+
   it("runs a planning session into a completed trip with tool logs and messages", async () => {
     const user = await createUserWithSettings("agent-run");
     const session = await startPlanningSession({
@@ -644,6 +724,10 @@ describe("agent planning sessions", () => {
       userId: user.id,
       prompt: "Continue against an explicitly selected trip.",
     });
+    await prisma.agentSession.update({
+      where: { id: session.id },
+      data: { status: "completed" },
+    });
 
     const chatClient: AgentChatClient = {
       async complete({ messages }) {
@@ -781,7 +865,7 @@ describe("agent planning sessions", () => {
     });
     await prisma.agentSession.update({
       where: { id: session.id },
-      data: { tripId: oldTrip.id },
+      data: { status: "completed", tripId: oldTrip.id },
     });
 
     let calls = 0;

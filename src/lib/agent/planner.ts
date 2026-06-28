@@ -45,6 +45,20 @@ const ORIGIN_REQUIRED_MESSAGE =
 
 export { AgentRunTimeoutError };
 
+export class AgentSessionAlreadyRunningError extends Error {
+  constructor() {
+    super("Agent session is already running.");
+    this.name = "AgentSessionAlreadyRunningError";
+  }
+}
+
+export class AgentSessionNotFoundError extends Error {
+  constructor() {
+    super("Agent session not found.");
+    this.name = "AgentSessionNotFoundError";
+  }
+}
+
 type PlanningSettings = {
   defaultCity: string;
   timezone: string;
@@ -1209,25 +1223,31 @@ export async function continueAgentSession(
   options: RunPlanningSessionOptions = {}
 ): Promise<PlanningSessionResult> {
   const normalizedMessage = normalizePrompt(message);
-  const session = await prisma.agentSession.findFirst({
-    where: { id: sessionId, userId },
-  });
+  const session = await prisma.$transaction(async (tx) => {
+    const existing = await tx.agentSession.findFirst({
+      where: { id: sessionId, userId },
+    });
 
-  if (!session) {
-    throw new Error("Agent session not found.");
-  }
+    if (!existing) {
+      throw new AgentSessionNotFoundError();
+    }
 
-  await prisma.agentSession.update({
-    where: { id: sessionId },
-    data: {
-      status: "running",
-      messages: {
-        create: {
-          role: "user",
-          content: normalizedMessage,
+    if (existing.status === "running") {
+      throw new AgentSessionAlreadyRunningError();
+    }
+
+    return tx.agentSession.update({
+      where: { id: sessionId },
+      data: {
+        status: "running",
+        messages: {
+          create: {
+            role: "user",
+            content: normalizedMessage,
+          },
         },
       },
-    },
+    });
   });
 
   try {

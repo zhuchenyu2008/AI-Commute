@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import { continueAgentSession } from "@/lib/agent/planner";
+import {
+  AgentSessionAlreadyRunningError,
+  AgentSessionNotFoundError,
+  continueAgentSession,
+} from "@/lib/agent/planner";
+import { prisma } from "@/lib/db";
 
 type RouteContext = {
   params: Promise<{
@@ -26,10 +31,50 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
+  const session = await prisma.agentSession.findFirst({
+    where: { id: sessionId, userId: user.id },
+  });
+
+  if (!session) {
+    return NextResponse.json({ error: "未找到智能体会话" }, { status: 404 });
+  }
+
+  if (session.status === "running") {
+    return NextResponse.json(
+      { error: "智能体会话正在运行，请稍后再发送消息" },
+      { status: 409 }
+    );
+  }
+
   void continueAgentSession({
     userId: user.id,
     sessionId,
     message,
+  }).catch(async (error) => {
+    if (
+      error instanceof AgentSessionNotFoundError ||
+      error instanceof AgentSessionAlreadyRunningError
+    ) {
+      return;
+    }
+
+    await prisma.agentSession
+      .update({
+        where: { id: sessionId },
+        data: {
+          status: "failed",
+          messages: {
+            create: {
+              role: "assistant",
+              content:
+                error instanceof Error
+                  ? `规划失败：${error.message}`
+                  : "规划失败：请稍后重试。",
+            },
+          },
+        },
+      })
+      .catch(() => undefined);
   });
 
   return NextResponse.json({ status: "running" }, { status: 202 });

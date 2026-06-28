@@ -72,8 +72,33 @@ export type ReplaceReminderScheduleInput = {
   cadenceMinutes?: readonly number[];
 };
 
+type PersistedStopForRoute = {
+  id: string;
+  name: string;
+  lngLat: string | null;
+  order: number;
+  targetArriveAt: Date | null;
+};
+
 function serialize(value: unknown) {
   return value === undefined ? undefined : JSON.stringify(value);
+}
+
+function normalizeCadenceMinutes(cadenceMinutes?: readonly number[]) {
+  if (!cadenceMinutes) {
+    return undefined;
+  }
+
+  const normalized = cadenceMinutes.map((value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      throw new Error("Reminder cadence minutes must be non-negative numbers.");
+    }
+
+    return Math.round(numeric);
+  });
+
+  return [...new Set(normalized)].sort((left, right) => right - left);
 }
 
 function byInputOrder<T extends { order?: number | null }>(items: T[]) {
@@ -93,6 +118,64 @@ function hasExplicitLegEndpoints(legs: PlannedTripLegInput[] | undefined) {
         leg.destinationLngLat !== undefined
     ) ?? false
   );
+}
+
+function normalizeEndpoint(value?: string | null) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function findStopByEndpoint(
+  stops: PersistedStopForRoute[],
+  name?: string,
+  lngLat?: string
+) {
+  const normalizedLngLat = normalizeEndpoint(lngLat);
+  const normalizedName = normalizeEndpoint(name);
+
+  return stops.find((stop) => {
+    if (normalizedLngLat && normalizeEndpoint(stop.lngLat) === normalizedLngLat) {
+      return true;
+    }
+
+    return normalizedName && normalizeEndpoint(stop.name) === normalizedName;
+  });
+}
+
+function resolveLegStops(input: {
+  stops: PersistedStopForRoute[];
+  legInput: PlannedTripLegInput;
+  index: number;
+  explicitLegEndpoints: boolean;
+}) {
+  const sequentialFrom = input.stops[input.index];
+  const sequentialTo = input.stops[input.index + 1] ?? input.stops.at(-1);
+
+  if (!input.explicitLegEndpoints) {
+    return {
+      fromStop: sequentialFrom,
+      toStop: sequentialTo,
+    };
+  }
+
+  const fromStop =
+    findStopByEndpoint(
+      input.stops,
+      input.legInput.originName,
+      input.legInput.originLngLat
+    ) ??
+    sequentialFrom ??
+    input.stops[input.index - 1];
+  const toStop =
+    findStopByEndpoint(
+      input.stops,
+      input.legInput.destinationName,
+      input.legInput.destinationLngLat
+    ) ?? sequentialTo;
+
+  return {
+    fromStop,
+    toStop,
+  };
 }
 
 function defaultLatestDepartAt(
@@ -207,11 +290,12 @@ export async function replaceTripRoute(input: ReplaceTripRouteInput) {
     const explicitLegEndpoints = hasExplicitLegEndpoints(orderedLegs);
     for (const [index, legInput] of orderedLegs.entries()) {
       const order = legInput.order ?? index;
-      const fromStop = explicitLegEndpoints ? stops[index - 1] : stops[index];
-      const toStop =
-        (explicitLegEndpoints
-          ? stops.find((stop) => stop.order === order) ?? stops[index]
-          : stops[index + 1]) ?? stops[stops.length - 1];
+      const { fromStop, toStop } = resolveLegStops({
+        stops,
+        legInput,
+        index,
+        explicitLegEndpoints,
+      });
       if (!toStop) {
         throw new Error(`Route leg ${order} is missing a destination stop.`);
       }
@@ -338,6 +422,10 @@ export async function createMemoryCandidateForTrip(
     await findOwnedTrip(input.tripId, input.userId);
   }
 
+  if (input.valueJson === undefined) {
+    throw new Error("Memory candidate valueJson is required.");
+  }
+
   const valueJson =
     typeof input.valueJson === "string"
       ? input.valueJson
@@ -409,6 +497,7 @@ export async function selectRouteCandidate(input: SelectRouteCandidateInput) {
 
 export async function replaceReminderSchedule(input: ReplaceReminderScheduleInput) {
   await findOwnedTrip(input.tripId, input.userId);
+  const cadenceMinutes = normalizeCadenceMinutes(input.cadenceMinutes);
   const legs = input.legId || input.legOrder !== undefined
     ? [await findOwnedLeg(input)]
     : await prisma.tripLeg.findMany({
@@ -433,7 +522,7 @@ export async function replaceReminderSchedule(input: ReplaceReminderScheduleInpu
           tripId: input.tripId,
           legId: leg.id,
           latestDepartAt: leg.latestDepartAt,
-          cadenceMinutes: input.cadenceMinutes,
+          cadenceMinutes,
         }),
       });
     }
