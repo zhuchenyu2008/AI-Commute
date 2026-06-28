@@ -3,6 +3,11 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { readEnv } from "@/lib/env";
 
+const ROUTE_PREFERENCES = new Set(["balanced", "fastest", "habit", "transit", "bike"]);
+const TIMEZONES = new Set(["Asia/Shanghai"]);
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LNG_LAT_PATTERN = /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/;
+
 function getSettingsDefaults() {
   const env = readEnv();
   return {
@@ -27,6 +32,37 @@ function asOptionalString(value: unknown): string | null | undefined {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function isValidLngLat(value: string) {
+  if (!LNG_LAT_PATTERN.test(value)) return false;
+  const [lng, lat] = value.split(",").map(Number);
+  return lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90;
+}
+
+function validateSettings(data: {
+  defaultCity: string;
+  timezone: string;
+  originName: string;
+  originLngLat: string;
+  routePreference: string;
+  telegramChatId: string | null;
+  emailRecipient: string | null;
+}) {
+  const errors: string[] = [];
+
+  if (!data.defaultCity) errors.push("defaultCity is required");
+  if (!TIMEZONES.has(data.timezone)) errors.push("timezone is unsupported");
+  if (!data.originName) errors.push("originName is required");
+  if (!isValidLngLat(data.originLngLat)) errors.push("originLngLat is invalid");
+  if (!ROUTE_PREFERENCES.has(data.routePreference)) {
+    errors.push("routePreference is unsupported");
+  }
+  if (data.emailRecipient && !EMAIL_PATTERN.test(data.emailRecipient)) {
+    errors.push("emailRecipient is invalid");
+  }
+
+  return errors;
 }
 
 export async function GET() {
@@ -65,6 +101,11 @@ export async function PUT(request: Request) {
     telegramChatId: asOptionalString(body.telegramChatId) ?? null,
     emailRecipient: asOptionalString(body.emailRecipient) ?? null
   };
+  const errors = validateSettings(data);
+
+  if (errors.length > 0) {
+    return NextResponse.json({ error: "Invalid settings", details: errors }, { status: 400 });
+  }
 
   const settings = await prisma.userSettings.upsert({
     where: { userId: user.id },

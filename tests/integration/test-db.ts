@@ -16,6 +16,17 @@ function splitSqlStatements(sql: string) {
 export async function ensureTestDatabase() {
   if (ensured) return;
 
+  const databaseUrl = process.env.DATABASE_URL;
+  if (
+    !databaseUrl ||
+    !databaseUrl.startsWith("file:./") ||
+    !/(test|verify)/i.test(databaseUrl)
+  ) {
+    throw new Error(
+      "Integration tests require DATABASE_URL to be an explicit test SQLite file."
+    );
+  }
+
   const existing = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'User'"
   );

@@ -10,9 +10,18 @@ export async function POST(request: Request) {
     .find((part) => part.startsWith(`${SESSION_COOKIE}=`))
     ?.slice(SESSION_COOKIE.length + 1);
 
+  let decodedToken: string | null = null;
   if (token) {
+    try {
+      decodedToken = decodeURIComponent(token);
+    } catch {
+      decodedToken = null;
+    }
+  }
+
+  if (decodedToken) {
     await prisma.session.deleteMany({
-      where: { tokenHash: hashSessionToken(decodeURIComponent(token)) }
+      where: { tokenHash: hashSessionToken(decodedToken) }
     });
   }
 
