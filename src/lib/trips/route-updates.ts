@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { normalizeBufferComponents } from "@/lib/trips/buffers";
+export { cancelTripMonitoring } from "@/lib/trips/monitoring";
 import { buildReminderSchedule } from "@/lib/trips/reminders";
 import { normalizeRouteTitle } from "@/lib/trips/title";
 import type {
@@ -530,28 +531,6 @@ export async function replaceReminderSchedule(input: ReplaceReminderScheduleInpu
     return tx.reminderJob.findMany({
       where: { tripId: input.tripId },
       orderBy: { scheduledFor: "asc" },
-    });
-  });
-}
-
-export async function cancelTripMonitoring(input: {
-  tripId: string;
-  userId: string;
-}) {
-  await findOwnedTrip(input.tripId, input.userId);
-
-  return prisma.$transaction(async (tx) => {
-    await tx.reminderJob.updateMany({
-      where: { tripId: input.tripId, status: "scheduled" },
-      data: { status: "cancelled" },
-    });
-    await tx.tripLeg.updateMany({
-      where: { tripId: input.tripId },
-      data: { status: "cancelled" },
-    });
-    return tx.trip.update({
-      where: { id: input.tripId },
-      data: { status: "cancelled" },
     });
   });
 }

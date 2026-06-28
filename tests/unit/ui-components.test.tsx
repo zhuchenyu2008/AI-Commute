@@ -16,6 +16,7 @@ import { getAgentStartResult } from "@/components/home/commute-input";
 import { BufferList } from "@/components/trips/buffer-list";
 import { RouteTimeline } from "@/components/trips/route-timeline";
 import { SettingsForm } from "@app/settings/settings-form";
+import { formatMonitoredDuration } from "@/lib/trips/monitoring";
 
 describe("sample-aligned UI components", () => {
   afterEach(() => {
@@ -185,6 +186,15 @@ describe("sample-aligned UI components", () => {
     expect(getAgentConversationHref("session-1")).toBe(
       "/agent/session-1?view=conversation"
     );
+  });
+
+  it("formats monitored duration in Chinese", () => {
+    expect(
+      formatMonitoredDuration({
+        createdAt: new Date("2026-06-28T00:00:00.000Z"),
+        now: new Date("2026-06-28T00:45:00.000Z"),
+      })
+    ).toBe("45分钟");
   });
 
   it("marks failed agent sessions as terminal instead of loading", () => {
