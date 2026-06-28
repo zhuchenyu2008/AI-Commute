@@ -10,6 +10,7 @@ import type {
 } from "@/lib/agent/chat-client";
 import { createOpenAiChatClient } from "@/lib/agent/chat-client";
 import { assertAgentRunActive, recordToolCall } from "@/lib/agent/tools";
+import { buildConfirmedMemoryContext } from "@/lib/memories/context";
 import type {
   AgentToolName,
   PlanningAttemptResult,
@@ -309,11 +310,19 @@ const SYSTEM_PROMPT = `你是一个个人通勤规划 AI。当前日期按北京
 
 只有当你已经获得足够证据并完成比较后，才调用 create_trip。create_trip 中必须写出你选择的停靠点、每段路线、路线分钟数、非路线缓冲组件、选择理由和来源。`;
 
-function createInitialMessages(session: { prompt: string }, attempt: number) {
+async function createInitialMessages(
+  session: { prompt: string; userId: string },
+  attempt: number
+) {
+  const memoryContext = await buildConfirmedMemoryContext(session.userId);
   const messages: AgentChatMessage[] = [
     {
       role: "system",
       content: SYSTEM_PROMPT,
+    },
+    {
+      role: "system",
+      content: memoryContext,
     },
     {
       role: "user",
@@ -753,7 +762,7 @@ export async function runPlanningAttempt(
     prompt: session.prompt,
     signal,
   };
-  const messages = createInitialMessages(session, attempt);
+  const messages = await createInitialMessages(session, attempt);
 
   await createAssistantMessage({
     sessionId,

@@ -262,6 +262,93 @@ describe("agent planning sessions", () => {
     });
   });
 
+  it("injects confirmed memories into every planning run before the AI calls tools", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `agent-memory-context-${Date.now()}@example.com`,
+        name: "Memory Context User",
+        passwordHash: "hash",
+        settings: {
+          create: {
+            defaultCity: "宁波",
+            timezone: "Asia/Shanghai",
+            originName: "外事学校",
+            originLngLat: "121.1,29.1",
+            routePreference: "balanced",
+          },
+        },
+        memories: {
+          create: {
+            kind: "origin",
+            label: "用户确认常从外事学校出发",
+            valueJson: JSON.stringify({
+              originName: "外事学校",
+              originLngLat: "121.1,29.1",
+            }),
+          },
+        },
+      },
+    });
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "明天 10:00 到东钱湖地铁站",
+    });
+    const seenMessages: string[] = [];
+    const chatClient: AgentChatClient = {
+      async complete({ messages }) {
+        seenMessages.push(...messages.map((message) => message.content));
+        return {
+          message: {
+            role: "assistant",
+            content: "根据确认记忆创建行程。",
+            toolCalls: [
+              {
+                id: "create-from-memory",
+                name: "create_trip",
+                arguments: {
+                  title: "外事学校-东钱湖地铁站",
+                  timezone: "Asia/Shanghai",
+                  finalStopName: "东钱湖地铁站",
+                  stops: [
+                    {
+                      order: 1,
+                      name: "东钱湖地铁站",
+                      lngLat: "121.2,29.2",
+                      kind: "destination",
+                    },
+                  ],
+                  legs: [
+                    {
+                      order: 1,
+                      originName: "外事学校",
+                      originLngLat: "121.1,29.1",
+                      destinationName: "东钱湖地铁站",
+                      destinationLngLat: "121.2,29.2",
+                      routeMinutes: 25,
+                      bufferComponents: [
+                        {
+                          category: "transfer",
+                          label: "进站缓冲",
+                          minutes: 5,
+                          reason: "预留进站时间",
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        };
+      },
+    };
+
+    await runPlanningSession(session.id, { chatClient });
+
+    expect(seenMessages.join("\n")).toContain("用户已确认的长期记忆");
+    expect(seenMessages.join("\n")).toContain("用户确认常从外事学校出发");
+  });
+
   it("lets the AI choose AMap tools, route mode, and buffer details", async () => {
     const user = await prisma.user.create({
       data: {
