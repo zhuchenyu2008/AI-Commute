@@ -6,9 +6,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RootLayout from "@app/layout";
 import {
+  AgentEventList,
   buildAgentEvents,
   formatAgentToolName,
   getAgentConversationHref,
+  getAgentSendMessageResult,
   getAgentSessionViewState,
 } from "@/components/agent/agent-event-list";
 import { BottomNav } from "@/components/bottom-nav";
@@ -21,10 +23,21 @@ import {
   getMonitoringStatusDisplay,
 } from "@/lib/trips/monitoring";
 
+const { routerPushMock } = vi.hoisted(() => ({
+  routerPushMock: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPushMock,
+  }),
+}));
+
 describe("sample-aligned UI components", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    routerPushMock.mockReset();
   });
 
   it("renders BottomNav labels and navigation aria labels", () => {
@@ -234,6 +247,94 @@ describe("sample-aligned UI components", () => {
       route: "/login",
       error: "",
     });
+  });
+
+  it("accepts continued agent messages when the API starts a run", () => {
+    expect(getAgentSendMessageResult(202, { status: "running" })).toEqual({
+      accepted: true,
+      error: "",
+    });
+  });
+
+  it("surfaces continued agent message validation errors", () => {
+    expect(
+      getAgentSendMessageResult(400, {
+        error: "请输入要告诉智能体的内容",
+      })
+    ).toEqual({
+      accepted: false,
+      error: "请输入要告诉智能体的内容",
+    });
+  });
+
+  it("routes agent starts to an action href while preserving the error", () => {
+    expect(
+      getAgentStartResult(400, {
+        actionHref: "/settings",
+        error: "请先完成设置",
+      })
+    ).toEqual({
+      route: "/settings",
+      error: "请先完成设置",
+    });
+  });
+
+  it("continues completed conversation sessions without redirecting", async () => {
+    const completedSession = {
+      id: "session-1",
+      tripId: "trip-1",
+      status: "completed",
+      prompt: "去公司",
+      messages: [],
+      toolCalls: [],
+    };
+    const runningSession = {
+      ...completedSession,
+      status: "running",
+      messages: [
+        {
+          id: "message-1",
+          role: "user",
+          content: "再帮我看看下雨怎么办",
+          createdAt: "2026-06-29T00:00:00.000Z",
+        },
+      ],
+    };
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === "/api/agent-sessions/session-1/messages") {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toEqual({
+          message: "再帮我看看下雨怎么办",
+        });
+        return Response.json({ status: "running" }, { status: 202 });
+      }
+
+      if (String(url) === "/api/agent-sessions/session-1") {
+        return Response.json({
+          session: fetchMock.mock.calls.length > 1 ? runningSession : completedSession,
+        });
+      }
+
+      return Response.json({ error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AgentEventList autoRedirect={false} sessionId="session-1" />);
+
+    const input = await screen.findByLabelText("告诉智能体更多信息");
+    fireEvent.change(input, {
+      target: { value: " 再帮我看看下雨怎么办 " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送给智能体" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/agent-sessions/session-1/messages",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    await screen.findByText("再帮我看看下雨怎么办");
+    expect(routerPushMock).not.toHaveBeenCalled();
   });
 
   it("loads Inter from the root layout", () => {
