@@ -48,6 +48,7 @@ type AgentEvent = {
 };
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "timed_out", "cancelled"]);
+const REDIRECT_DELAY_MS = 1200;
 
 export function buildAgentEvents(session: {
   messages: AgentMessage[];
@@ -97,6 +98,7 @@ export function getAgentSessionViewState({
   return {
     isLoading: !session || !isTerminal,
     isTerminal,
+    redirectDelayMs: redirectTo ? REDIRECT_DELAY_MS : 0,
     redirectTo,
     status,
   };
@@ -146,7 +148,11 @@ export function AgentEventList({
       });
 
       if (viewState.redirectTo) {
-        router.push(viewState.redirectTo);
+        window.setTimeout(() => {
+          if (!cancelled && viewState.redirectTo) {
+            router.push(viewState.redirectTo);
+          }
+        }, viewState.redirectDelayMs);
       }
       if (viewState.isTerminal) {
         stopPolling();

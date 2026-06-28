@@ -150,12 +150,13 @@ describe("sample-aligned UI components", () => {
   });
 
   it("only auto-redirects completed agent sessions when enabled", () => {
-    expect(
-      getAgentSessionViewState({
-        autoRedirect: true,
-        session: { status: "completed", tripId: "trip-1" },
-      }).redirectTo
-    ).toBe("/trips/trip-1");
+    const state = getAgentSessionViewState({
+      autoRedirect: true,
+      session: { status: "completed", tripId: "trip-1" },
+    });
+
+    expect(state.redirectTo).toBe("/trips/trip-1");
+    expect(state.redirectDelayMs).toBeGreaterThanOrEqual(750);
     expect(
       getAgentSessionViewState({
         autoRedirect: false,

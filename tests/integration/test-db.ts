@@ -20,7 +20,7 @@ export async function ensureTestDatabase() {
   if (
     !databaseUrl ||
     !databaseUrl.startsWith("file:./") ||
-    !/(test|verify)/i.test(databaseUrl)
+    !/(test|verify|e2e)/i.test(databaseUrl)
   ) {
     throw new Error(
       "Integration tests require DATABASE_URL to be an explicit test SQLite file."

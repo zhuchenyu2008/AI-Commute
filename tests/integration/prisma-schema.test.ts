@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 
 describe("Prisma schema", () => {
   const schema = readFileSync("prisma/schema.prisma", "utf8");
+  const migration = readFileSync(
+    "prisma/migrations/20260628083500_init/migration.sql",
+    "utf8"
+  );
 
   it("models the Agent-centered multi-stop trip graph", () => {
     for (const model of [
@@ -42,5 +46,10 @@ describe("Prisma schema", () => {
     expect(schema).toContain("@@unique([candidateId, order])");
     expect(schema).toContain("@@index([legId, order])");
     expect(schema).not.toContain("@@unique([legId, order])");
+  });
+
+  it("keeps migration defaults valid for local SQLite setup", () => {
+    expect(migration).toContain('"defaultCity" TEXT NOT NULL DEFAULT \'宁波\'');
+    expect(migration).toContain('"originName" TEXT NOT NULL DEFAULT \'家\'');
   });
 });
