@@ -6,6 +6,8 @@ import { ensureTestDatabase } from "./test-db";
 type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
 
 const getCurrentUserMock = vi.hoisted(() => vi.fn<() => Promise<CurrentUser | null>>());
+const searchPoiMock = vi.hoisted(() => vi.fn());
+const createAmapClientMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth/session", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/session")>();
@@ -15,6 +17,10 @@ vi.mock("@/lib/auth/session", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/amap", () => ({
+  createAmapClient: createAmapClientMock
+}));
+
 describe("settings API", () => {
   beforeAll(async () => {
     await ensureTestDatabase();
@@ -22,6 +28,17 @@ describe("settings API", () => {
 
   beforeEach(() => {
     getCurrentUserMock.mockReset();
+    searchPoiMock.mockReset();
+    createAmapClientMock.mockReset();
+    searchPoiMock.mockResolvedValue([
+      {
+        id: "poi-westlake",
+        name: "西湖",
+        address: "杭州",
+        lngLat: "120.1,30.2"
+      }
+    ]);
+    createAmapClientMock.mockReturnValue({ searchPoi: searchPoiMock });
   });
 
   it("rejects unauthenticated settings requests", async () => {
@@ -92,13 +109,30 @@ describe("settings API", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.places[0]).toEqual(
-      expect.objectContaining({
-        id: expect.any(String),
-        name: expect.any(String),
-        lngLat: expect.stringMatching(/^-?\d/),
-      })
+    expect(searchPoiMock).toHaveBeenCalledWith({
+      keywords: "外事学校",
+      city: "宁波"
+    });
+    expect(body.places).toEqual([
+      {
+        id: "poi-westlake",
+        name: "西湖",
+        address: "杭州",
+        lngLat: "120.1,30.2"
+      }
+    ]);
+  });
+
+  it("rejects unauthenticated place searches", async () => {
+    const { GET } = await import("@app/api/places/search/route");
+    getCurrentUserMock.mockResolvedValue(null);
+
+    const response = await GET(
+      new Request("http://localhost/api/places/search?keywords=外事学校&city=宁波")
     );
+
+    expect(response.status).toBe(401);
+    expect(createAmapClientMock).not.toHaveBeenCalled();
   });
 
   it("persists valid settings updates", async () => {
