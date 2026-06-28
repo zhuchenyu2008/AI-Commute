@@ -44,11 +44,20 @@ describe("createFallbackChatClient", () => {
       (toolCall) => toolCall.name === "create_trip"
     );
     const createTripArgs = createTripCall?.arguments as
-      | { legs?: Array<{ originName?: unknown; originLngLat?: unknown }> }
+      | {
+          legs?: Array<{
+            originName?: unknown;
+            originLngLat?: unknown;
+            routeTitle?: unknown;
+          }>;
+        }
       | undefined;
+    const leg = createTripArgs?.legs?.[0];
 
-    expect(createTripArgs?.legs?.[0]?.originName).not.toBe("家");
-    expect(createTripArgs?.legs?.[0]?.originName).toBe("");
-    expect(createTripArgs?.legs?.[0]?.originLngLat).toBe("");
+    expect(leg?.originName).not.toBe("家");
+    expect(leg?.originName).toBe("");
+    expect(leg?.originLngLat).toBe("");
+    expect(leg?.routeTitle).not.toContain("家");
+    expect(leg?.routeTitle).not.toContain("121.5230315924,29.8652491273");
   });
 });

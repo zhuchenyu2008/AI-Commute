@@ -184,6 +184,9 @@ export function createFallbackChatClient(): AgentChatClient {
         typeof settings.originLngLat === "string"
           ? settings.originLngLat
           : "";
+      const routeTitle = originName
+        ? `公交/地铁路线：${originName} 到 宁波龙湖天街`
+        : "公交/地铁路线：前往宁波龙湖天街";
 
       if (!toolMessages.some((message) => message.toolCallId === "mock-route")) {
         return {
@@ -238,7 +241,7 @@ export function createFallbackChatClient(): AgentChatClient {
                     bufferMinutes: 10,
                     totalMinutes: 52,
                     mode: "transit",
-                    routeTitle: "公交/地铁路线：家 到 宁波龙湖天街",
+                    routeTitle,
                     routeRationale:
                       "mock agent 根据高德路线工具结果选择公交/地铁作为本地演示方案。",
                     segmentTitle: "公交/地铁到龙湖天街",
