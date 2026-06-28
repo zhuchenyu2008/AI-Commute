@@ -112,6 +112,37 @@ describe("settings API", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it.each([
+    ["defaultCity", ""],
+    ["timezone", ""],
+    ["originName", " "],
+    ["originLngLat", ""],
+    ["routePreference", ""],
+    ["timezone", 123],
+    ["originLngLat", []],
+    ["routePreference", {}]
+  ])("returns 400 when %s is supplied as an invalid value", async (field, value) => {
+    const { PUT } = await import("@app/api/settings/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `settings-invalid-supplied-${field}-${Date.now()}@example.com`,
+        name: "Settings Invalid Supplied",
+        passwordHash: "hash"
+      },
+      include: { settings: true }
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await PUT(
+      new Request("http://localhost/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({ [field]: value })
+      })
+    );
+
+    expect(response.status).toBe(400);
+  });
 });
 
 describe("logout API", () => {

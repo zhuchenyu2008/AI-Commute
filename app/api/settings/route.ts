@@ -34,6 +34,14 @@ function asOptionalString(value: unknown): string | null | undefined {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function readRequiredString(body: Record<string, unknown>, key: string, fallback: string): string {
+  if (!Object.prototype.hasOwnProperty.call(body, key)) {
+    return fallback;
+  }
+
+  return asOptionalString(body[key]) ?? "";
+}
+
 function isValidLngLat(value: string) {
   if (!LNG_LAT_PATTERN.test(value)) return false;
   const [lng, lat] = value.split(",").map(Number);
@@ -89,15 +97,11 @@ export async function PUT(request: Request) {
   const body = await request.json().catch(() => ({}));
   const defaults = getSettingsDefaults();
   const data = {
-    defaultCity:
-      asOptionalString(body.defaultCity) || defaults.defaultCity,
-    timezone: asOptionalString(body.timezone) || defaults.timezone,
-    originName:
-      asOptionalString(body.originName) || defaults.originName,
-    originLngLat:
-      asOptionalString(body.originLngLat) || defaults.originLngLat,
-    routePreference:
-      asOptionalString(body.routePreference) || defaults.routePreference,
+    defaultCity: readRequiredString(body, "defaultCity", defaults.defaultCity),
+    timezone: readRequiredString(body, "timezone", defaults.timezone),
+    originName: readRequiredString(body, "originName", defaults.originName),
+    originLngLat: readRequiredString(body, "originLngLat", defaults.originLngLat),
+    routePreference: readRequiredString(body, "routePreference", defaults.routePreference),
     telegramChatId: asOptionalString(body.telegramChatId) ?? null,
     emailRecipient: asOptionalString(body.emailRecipient) ?? null
   };
