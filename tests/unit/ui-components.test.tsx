@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RootLayout from "@app/layout";
@@ -35,6 +35,7 @@ vi.mock("next/navigation", () => ({
 
 describe("sample-aligned UI components", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     routerPushMock.mockReset();
@@ -335,6 +336,41 @@ describe("sample-aligned UI components", () => {
     });
     await screen.findByText("再帮我看看下雨怎么办");
     expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it("does not post continued messages while the session is running", async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === "/api/agent-sessions/session-running") {
+        return Response.json({
+          session: {
+            id: "session-running",
+            tripId: null,
+            status: "running",
+            prompt: "去公司",
+            messages: [],
+            toolCalls: [],
+          },
+        });
+      }
+
+      return Response.json({ error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AgentEventList autoRedirect={false} sessionId="session-running" />);
+
+    const input = await screen.findByLabelText("告诉智能体更多信息");
+    expect((input as HTMLInputElement).disabled).toBe(true);
+    fireEvent.submit(input.closest("form")!);
+
+    expect(
+      fetchMock.mock.calls.some(([url, init]) => {
+        return (
+          String(url) === "/api/agent-sessions/session-running/messages" &&
+          init?.method === "POST"
+        );
+      })
+    ).toBe(false);
   });
 
   it("loads Inter from the root layout", () => {

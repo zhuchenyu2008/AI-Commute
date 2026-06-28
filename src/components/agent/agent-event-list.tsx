@@ -218,6 +218,11 @@ export function AgentEventList({
 
   async function onSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isSendDisabled) {
+      return;
+    }
+
     const trimmed = message.trim();
 
     if (!trimmed) {
@@ -308,7 +313,7 @@ export function AgentEventList({
             <input
               aria-label="告诉智能体更多信息"
               className="min-w-0 flex-1 rounded-full bg-[#f2f4f6] px-4 py-3 text-sm font-medium text-[#191c1e] outline-none ring-[#2563eb]/20 transition placeholder:text-[#737686] focus:bg-white focus:ring-4"
-              disabled={isSending}
+              disabled={isSendDisabled}
               onChange={(event) => setMessage(event.target.value)}
               placeholder="继续补充你的通勤需求"
               value={message}
