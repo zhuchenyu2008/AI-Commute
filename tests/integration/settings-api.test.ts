@@ -8,6 +8,8 @@ type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
 const getCurrentUserMock = vi.hoisted(() => vi.fn<() => Promise<CurrentUser | null>>());
 const searchPoiMock = vi.hoisted(() => vi.fn());
 const createAmapClientMock = vi.hoisted(() => vi.fn());
+const sendTelegramMock = vi.hoisted(() => vi.fn());
+const sendEmailMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth/session", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/session")>();
@@ -21,6 +23,14 @@ vi.mock("@/lib/amap", () => ({
   createAmapClient: createAmapClientMock
 }));
 
+vi.mock("@/lib/notifications/telegram", () => ({
+  sendTelegram: sendTelegramMock,
+}));
+
+vi.mock("@/lib/notifications/email", () => ({
+  sendEmail: sendEmailMock,
+}));
+
 describe("settings API", () => {
   beforeAll(async () => {
     await ensureTestDatabase();
@@ -30,6 +40,8 @@ describe("settings API", () => {
     getCurrentUserMock.mockReset();
     searchPoiMock.mockReset();
     createAmapClientMock.mockReset();
+    sendTelegramMock.mockReset();
+    sendEmailMock.mockReset();
     searchPoiMock.mockResolvedValue([
       {
         id: "poi-westlake",
@@ -39,6 +51,14 @@ describe("settings API", () => {
       }
     ]);
     createAmapClientMock.mockReturnValue({ searchPoi: searchPoiMock });
+    sendTelegramMock.mockResolvedValue({
+      status: "sent",
+      recipient: "telegram-chat",
+    });
+    sendEmailMock.mockResolvedValue({
+      status: "sent",
+      recipient: "user@example.com",
+    });
   });
 
   it("rejects unauthenticated settings requests", async () => {
@@ -263,6 +283,125 @@ describe("settings API", () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  it("rejects unauthenticated test notification requests", async () => {
+    const { POST } = await import("@app/api/settings/test-notification/route");
+    getCurrentUserMock.mockResolvedValue(null);
+
+    const response = await POST(
+      new Request("http://localhost/api/settings/test-notification", {
+        method: "POST",
+        body: JSON.stringify({
+          channel: "telegram",
+          telegramChatId: "telegram-chat",
+        }),
+      })
+    );
+
+    expect(response.status).toBe(401);
+    expect(sendTelegramMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["telegram", { channel: "telegram" }, "Telegram Chat ID 不能为空"],
+    ["email", { channel: "email" }, "邮件接收人不能为空"],
+  ])("validates %s test notification recipients", async (_channel, body, message) => {
+    const { POST } = await import("@app/api/settings/test-notification/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `settings-test-notification-invalid-${_channel}-${Date.now()}@example.com`,
+        name: "通知测试用户",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await POST(
+      new Request("http://localhost/api/settings/test-notification", {
+        method: "POST",
+        body: JSON.stringify(body),
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe(message);
+    expect(sendTelegramMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("sends Telegram test notifications to the supplied chat id", async () => {
+    const { POST } = await import("@app/api/settings/test-notification/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `settings-test-telegram-${Date.now()}@example.com`,
+        name: "Telegram Test User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await POST(
+      new Request("http://localhost/api/settings/test-notification", {
+        method: "POST",
+        body: JSON.stringify({
+          channel: "telegram",
+          telegramChatId: "telegram-chat",
+        }),
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.result).toEqual({
+      status: "sent",
+      recipient: "telegram-chat",
+    });
+    expect(sendTelegramMock).toHaveBeenCalledWith({
+      chatId: "telegram-chat",
+      text: expect.stringContaining("通勤规划助手测试消息"),
+    });
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("sends email test notifications to the supplied recipient", async () => {
+    const { POST } = await import("@app/api/settings/test-notification/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `settings-test-email-${Date.now()}@example.com`,
+        name: "Email Test User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await POST(
+      new Request("http://localhost/api/settings/test-notification", {
+        method: "POST",
+        body: JSON.stringify({
+          channel: "email",
+          emailRecipient: "user@example.com",
+        }),
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.result).toEqual({
+      status: "sent",
+      recipient: "user@example.com",
+    });
+    expect(sendEmailMock).toHaveBeenCalledWith({
+      to: "user@example.com",
+      subject: "通勤规划助手测试邮件",
+      text: expect.stringContaining("通勤规划助手测试邮件"),
+    });
+    expect(sendTelegramMock).not.toHaveBeenCalled();
   });
 });
 

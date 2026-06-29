@@ -1,10 +1,84 @@
 import Link from "next/link";
-import { CloudSun, MapPin, Navigation, Sparkles } from "lucide-react";
+import { redirect } from "next/navigation";
+import {
+  ArrowRight,
+  Brain,
+  Clock3,
+  CloudSun,
+  History,
+  MapPin,
+  Navigation,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { GlassCard } from "@/components/glass-card";
 import { CommuteInput } from "@/components/home/commute-input";
+import { CurrentLocationLabel } from "@/components/home/current-location-label";
+import { getCurrentUser } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
+import {
+  formatHistoryTripSummary,
+  formatHomeTripStatus,
+  formatLatestMemorySummary,
+  type HomeTripStatusTone,
+} from "@/lib/home/summary";
 
-export default function HomePage() {
+const toneClasses: Record<HomeTripStatusTone, string> = {
+  danger: "bg-[#ffdad6] text-[#93000a]",
+  neutral: "bg-[#f2f4f6] text-[#434655]",
+  success: "bg-[#10B981]/10 text-[#047857]",
+  warning: "bg-[#F59E0B]/15 text-[#92400e]",
+};
+
+function formatShortDate(date: Date) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Shanghai",
+  }).format(date);
+}
+
+export default async function HomePage() {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const [settings, latestTrip, recentTrips, latestMemory] = await Promise.all([
+    prisma.userSettings.findUnique({
+      where: { userId: user.id },
+    }),
+    prisma.trip.findFirst({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        legs: {
+          orderBy: { order: "asc" },
+          include: { selectedCandidate: true },
+        },
+      },
+    }),
+    prisma.trip.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+      take: 3,
+    }),
+    prisma.memory.findFirst({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
+  const defaultCity = settings?.defaultCity ?? "宁波";
+  const latestTripStatus = formatHomeTripStatus(latestTrip);
+  const latestTripHref = latestTrip ? `/trips/${latestTrip.id}` : "/history";
+  const firstLeg = latestTrip?.legs[0];
+  const latestMinutes =
+    firstLeg?.selectedCandidate?.totalMinutes ??
+    firstLeg?.selectedCandidate?.routeMinutes ??
+    null;
+
   return (
     <AppShell active="home">
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
@@ -13,6 +87,7 @@ export default function HomePage() {
             <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.05em] text-[#434655]">
               <MapPin aria-hidden="true" className="size-4 text-[#2563eb]" />
               当前位置
+              <CurrentLocationLabel fallbackCity={defaultCity} />
             </p>
             <h1 className="text-3xl font-bold leading-tight text-[#191c1e] md:text-4xl">
               规划一次通勤
@@ -34,54 +109,90 @@ export default function HomePage() {
         </section>
 
         <section className="grid gap-4 md:grid-cols-[1.3fr_1fr]">
-          <GlassCard className="p-6">
-            <div className="flex items-center justify-between gap-4">
-              <span className="inline-flex items-center rounded-full bg-[#10B981]/10 px-3 py-1 text-xs font-bold text-[#10B981]">
-                就绪
-              </span>
-              <span className="text-sm font-bold text-[#2563eb]">
-                智能体辅助
-              </span>
-            </div>
-            <div className="mt-5 space-y-2">
-              <h2 className="text-2xl font-semibold text-[#191c1e]">
-                告诉智能体你要去哪、几点到。
-              </h2>
-              <p className="text-sm leading-6 text-[#434655]">
-                它会创建行程、计算缓冲、安排提醒，并持续监控路线状态。
-              </p>
-            </div>
-            <div className="mt-6 flex items-center justify-between border-t border-[#c3c6d7]/50 pt-4">
-              <div className="flex -space-x-2">
-                <div className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-[#f2f4f6] text-[#434655]">
-                  <Navigation aria-hidden="true" className="size-4" />
-                </div>
-                <div className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-[#2563eb] text-white">
-                  <Sparkles aria-hidden="true" className="size-4" />
-                </div>
+          <Link className="block" href={latestTripHref}>
+            <GlassCard className="p-6 transition hover:bg-white/85">
+              <div className="flex items-center justify-between gap-4">
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${toneClasses[latestTripStatus.tone]}`}
+                >
+                  {latestTripStatus.label}
+                </span>
+                <span className="inline-flex items-center gap-1 text-sm font-bold text-[#2563eb]">
+                  实时状态
+                  <ArrowRight aria-hidden="true" className="size-4" />
+                </span>
               </div>
-              <Link
-                className="rounded-full bg-[#2563eb] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6]"
-                href="/history"
-              >
-                查看历史
-              </Link>
-            </div>
-          </GlassCard>
+              <div className="mt-5 space-y-2">
+                <h2 className="break-words text-2xl font-semibold text-[#191c1e]">
+                  {latestTripStatus.title}
+                </h2>
+                <p className="text-sm leading-6 text-[#434655]">
+                  {latestTripStatus.description}
+                  {latestMinutes ? ` · 预计 ${latestMinutes} 分钟` : ""}
+                </p>
+              </div>
+              <div className="mt-6 flex items-center justify-between border-t border-[#c3c6d7]/50 pt-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#434655]">
+                  <Navigation aria-hidden="true" className="size-4" />
+                  最近一个行程
+                </div>
+                <span className="text-sm font-bold text-[#2563eb]">
+                  查看详情
+                </span>
+              </div>
+            </GlassCard>
+          </Link>
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-1">
-            <GlassCard className="p-4">
-              <p className="text-sm font-bold text-[#191c1e]">出发点</p>
-              <p className="mt-1 text-xs font-medium text-[#434655]">
-                使用已保存的位置
-              </p>
-            </GlassCard>
-            <GlassCard className="p-4">
-              <p className="text-sm font-bold text-[#191c1e]">通勤记忆</p>
-              <p className="mt-1 text-xs font-medium text-[#434655]">
-                确认地点和偏好
-              </p>
-            </GlassCard>
+            <Link className="block" href="/history">
+              <GlassCard className="h-full p-4 transition hover:bg-white/85">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-sm font-bold text-[#191c1e]">
+                    <History aria-hidden="true" className="size-4 text-[#2563eb]" />
+                    最近历史
+                  </p>
+                  <ArrowRight aria-hidden="true" className="size-4 text-[#434655]" />
+                </div>
+                <div className="mt-3 space-y-2">
+                  {recentTrips.length === 0 ? (
+                    <p className="text-xs font-medium text-[#434655]">
+                      暂无历史行程
+                    </p>
+                  ) : (
+                    recentTrips.map((trip) => (
+                      <div key={trip.id}>
+                        <p className="truncate text-xs font-bold text-[#191c1e]">
+                          {trip.title}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs font-medium text-[#434655]">
+                          {formatHistoryTripSummary(trip)}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </GlassCard>
+            </Link>
+            <Link className="block" href="/memories">
+              <GlassCard className="h-full p-4 transition hover:bg-white/85">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-sm font-bold text-[#191c1e]">
+                    <Brain aria-hidden="true" className="size-4 text-[#2563eb]" />
+                    通勤记忆
+                  </p>
+                  <ArrowRight aria-hidden="true" className="size-4 text-[#434655]" />
+                </div>
+                <p className="mt-3 text-xs font-medium leading-5 text-[#434655]">
+                  {formatLatestMemorySummary(latestMemory)}
+                </p>
+                {latestMemory ? (
+                  <p className="mt-2 flex items-center gap-1 text-xs font-medium text-[#737686]">
+                    <Clock3 aria-hidden="true" className="size-3.5" />
+                    {formatShortDate(latestMemory.updatedAt)}
+                  </p>
+                ) : null}
+              </GlassCard>
+            </Link>
           </div>
         </section>
       </div>

@@ -383,6 +383,18 @@ describe("agent planning sessions", () => {
     expect(persisted.messages.map((message) => message.role)).toContain(
       "assistant"
     );
+    expect(persisted.messages.map((message) => message.content)).toEqual(
+      expect.arrayContaining([
+        "第 1 次规划尝试：AI 可以持续调用工具，直到创建最终行程。",
+        "AI 已创建规划行程。",
+      ])
+    );
+    expect(persisted.messages.map((message) => message.content)).toContain(
+      "AI 已请求调用工具。"
+    );
+    expect(persisted.messages.map((message) => message.content)).not.toContain(
+      "AI requested tool calls."
+    );
     expect(persisted.toolCalls.map((call) => call.name)).toEqual(
       expect.arrayContaining([
         "search_poi",
@@ -1092,7 +1104,7 @@ function createTripChatClient(input: {
         return {
           message: {
             role: "assistant",
-            content: "Read planning evidence.",
+            content: "",
             toolCalls: [
               {
                 id: "call-search-poi",

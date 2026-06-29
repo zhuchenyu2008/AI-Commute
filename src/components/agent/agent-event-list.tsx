@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -11,6 +11,7 @@ import {
   Send,
   Wrench,
 } from "lucide-react";
+import { sanitizeAgentVisibleReply } from "@/lib/agent/plain-text";
 
 export { getAgentConversationHref } from "@/lib/app-routes";
 
@@ -91,7 +92,10 @@ export function buildAgentEvents(session: {
       id: `message-${message.id}`,
       kind: "message" as const,
       title: message.role === "assistant" ? "智能体更新" : "用户请求",
-      detail: message.content,
+      detail:
+        message.role === "assistant"
+          ? sanitizeAgentVisibleReply(message.content)
+          : message.content,
       status: message.role,
       createdAt: message.createdAt,
     })),
@@ -151,18 +155,22 @@ export function getAgentSendMessageResult(
 }
 
 export function AgentEventList({
+  allowMessages,
   autoRedirect = true,
   sessionId,
 }: {
+  allowMessages?: boolean;
   autoRedirect?: boolean;
   sessionId: string;
 }) {
-  const router = useRouter();
+  const { push } = useRouter();
+  const eventListRef = useRef<HTMLDivElement | null>(null);
   const [session, setSession] = useState<AgentSessionPayload | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [pollingVersion, setPollingVersion] = useState(0);
+  const hasContinuedRunRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,15 +214,17 @@ export function AgentEventList({
       setSession(payload.session);
       setError("");
 
+      const canRedirectCompletedSession =
+        autoRedirect && (!allowMessages || hasContinuedRunRef.current);
       const viewState = getAgentSessionViewState({
-        autoRedirect,
+        autoRedirect: canRedirectCompletedSession,
         session: payload.session,
       });
 
       if (viewState.redirectTo) {
         window.setTimeout(() => {
           if (!cancelled && viewState.redirectTo) {
-            router.push(viewState.redirectTo);
+            push(viewState.redirectTo);
           }
         }, viewState.redirectDelayMs);
       }
@@ -229,7 +239,14 @@ export function AgentEventList({
       cancelled = true;
       stopPolling();
     };
-  }, [autoRedirect, pollingVersion, router, sessionId]);
+  }, [allowMessages, autoRedirect, pollingVersion, push, sessionId]);
+
+  useEffect(() => {
+    const eventList = eventListRef.current;
+    if (eventList) {
+      eventList.scrollTop = eventList.scrollHeight;
+    }
+  }, [session?.messages.length, session?.toolCalls.length]);
 
   async function onSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -262,6 +279,7 @@ export function AgentEventList({
         return;
       }
 
+      hasContinuedRunRef.current = true;
       setMessage("");
       setError("");
 
@@ -285,6 +303,7 @@ export function AgentEventList({
     : [];
   const viewState = getAgentSessionViewState({ autoRedirect, session });
   const isSendDisabled = isSending || viewState.status === "running";
+  const canSendMessages = allowMessages ?? !autoRedirect;
 
   return (
     <section className="space-y-4">
@@ -305,7 +324,9 @@ export function AgentEventList({
           ) : (
             <AlertCircle aria-hidden="true" className="size-4" />
           )}
-          {formatStatus(viewState.status)}
+          {viewState.status === "completed"
+            ? "agent已完成规划"
+            : formatStatus(viewState.status)}
         </div>
       </div>
 
@@ -322,7 +343,7 @@ export function AgentEventList({
         </p>
       ) : null}
 
-      {!autoRedirect ? (
+      {canSendMessages ? (
         <form className="rounded-2xl bg-white/60 p-3" onSubmit={onSendMessage}>
           <div className="flex gap-2">
             <input
@@ -349,7 +370,11 @@ export function AgentEventList({
         </form>
       ) : null}
 
-      <div className="grid grid-cols-[36px_1fr] gap-x-3">
+      <div
+        className="max-h-[52vh] overflow-y-auto pr-1"
+        ref={eventListRef}
+      >
+        <div className="grid grid-cols-[36px_1fr] gap-x-3">
         {events.length === 0 ? (
           <>
             <div className="flex justify-center pt-1">
@@ -392,6 +417,7 @@ export function AgentEventList({
             </div>
           ))
         )}
+        </div>
       </div>
     </section>
   );

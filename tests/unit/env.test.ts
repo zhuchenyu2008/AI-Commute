@@ -33,4 +33,18 @@ describe("readEnv", () => {
     expect("defaultOrigin" in env).toBe(false);
     expect("defaultOriginName" in env).toBe(false);
   });
+
+  it("treats Telegram as configured when only the bot token is present", () => {
+    expect(
+      readEnv({
+        TELEGRAM_BOT_TOKEN: "telegram-token",
+      }).hasTelegramConfig
+    ).toBe(true);
+
+    expect(
+      readEnv({
+        TELEGRAM_CHAT_ID: "chat-id-from-old-env",
+      }).hasTelegramConfig
+    ).toBe(false);
+  });
 });

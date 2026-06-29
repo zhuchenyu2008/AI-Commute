@@ -19,7 +19,7 @@ export async function sendTelegram({
   chatId,
 }: TelegramSendInput): Promise<NotificationSendResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const recipient = chatId ?? process.env.TELEGRAM_CHAT_ID ?? null;
+  const recipient = chatId ?? null;
 
   if (!hasValue(token) || !hasValue(recipient)) {
     return { status: "skipped", recipient };

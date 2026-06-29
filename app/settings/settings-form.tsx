@@ -1,6 +1,7 @@
 "use client";
 
 import React, { FormEvent, useState } from "react";
+import { ChevronDown, Loader2, Mail, Send } from "lucide-react";
 
 type SettingsValues = {
   defaultCity: string;
@@ -20,6 +21,38 @@ const routePreferenceOptions = [
   ["bike", "骑行优先"],
 ] as const;
 
+const timezoneOptions = [["Asia/Shanghai", "北京时间（Asia/Shanghai）"]] as const;
+
+type SelectFieldProps = {
+  id: string;
+  name: string;
+  options: readonly (readonly [string, string])[];
+  defaultValue: string;
+};
+
+function SelectField({ defaultValue, id, name, options }: SelectFieldProps) {
+  return (
+    <div className="relative">
+      <select
+        className="w-full appearance-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 pr-11 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+        defaultValue={defaultValue}
+        id={id}
+        name={name}
+      >
+        {options.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-[#434655]"
+      />
+    </div>
+  );
+}
+
 type PlaceCandidate = {
   id: string;
   name: string;
@@ -30,6 +63,13 @@ type PlaceCandidate = {
 export function SettingsForm({ values }: { values: SettingsValues }) {
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [telegramChatId, setTelegramChatId] = useState(values.telegramChatId);
+  const [emailRecipient, setEmailRecipient] = useState(values.emailRecipient);
+  const [telegramTestStatus, setTelegramTestStatus] = useState("");
+  const [emailTestStatus, setEmailTestStatus] = useState("");
+  const [testingChannel, setTestingChannel] = useState<"telegram" | "email" | null>(
+    null
+  );
   const [defaultCity, setDefaultCity] = useState(values.defaultCity);
   const [originName, setOriginName] = useState(values.originName);
   const [originLngLat, setOriginLngLat] = useState(values.originLngLat);
@@ -75,6 +115,58 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
     setPlaceStatus("");
   }
 
+  async function sendTestNotification(channel: "telegram" | "email") {
+    if (testingChannel) {
+      return;
+    }
+
+    if (channel === "telegram") {
+      setTelegramTestStatus("");
+    } else {
+      setEmailTestStatus("");
+    }
+
+    setTestingChannel(channel);
+
+    try {
+      const response = await fetch("/api/settings/test-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          channel === "telegram"
+            ? { channel, telegramChatId }
+            : { channel, emailRecipient }
+        ),
+      });
+      const payload = await response.json().catch(() => ({}));
+      const ok = response.ok && payload.result?.status === "sent";
+      const message =
+        typeof payload.error === "string"
+          ? payload.error
+          : channel === "telegram"
+            ? ok
+              ? "Telegram 测试已发送"
+              : "Telegram 测试未发送"
+            : ok
+              ? "邮件测试已发送"
+              : "邮件测试未发送";
+
+      if (channel === "telegram") {
+        setTelegramTestStatus(message);
+      } else {
+        setEmailTestStatus(message);
+      }
+    } catch {
+      if (channel === "telegram") {
+        setTelegramTestStatus("Telegram 测试发送失败");
+      } else {
+        setEmailTestStatus("邮件测试发送失败");
+      }
+    } finally {
+      setTestingChannel(null);
+    }
+  }
+
   return (
     <form
       className="glass-card rounded-2xl p-6 shadow-xl shadow-slate-200/70"
@@ -100,11 +192,11 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
           htmlFor="timezone"
         >
           <span className="text-sm font-medium text-on-surface-variant">时区</span>
-          <input
-            className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+          <SelectField
             defaultValue={values.timezone}
             id="timezone"
             name="timezone"
+            options={timezoneOptions}
           />
         </label>
 
@@ -167,45 +259,81 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
           htmlFor="routePreference"
         >
           <span className="text-sm font-medium text-on-surface-variant">通勤方式倾向</span>
-          <select
-            className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+          <SelectField
             defaultValue={values.routePreference}
             id="routePreference"
             name="routePreference"
-          >
-            {routePreferenceOptions.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+            options={routePreferenceOptions}
+          />
         </label>
 
-        <label
-          className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center"
-          htmlFor="telegramChatId"
-        >
+        <section className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center">
           <span className="text-sm font-medium text-on-surface-variant">Telegram Chat ID</span>
-          <input
-            className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
-            defaultValue={values.telegramChatId}
-            id="telegramChatId"
-            name="telegramChatId"
-          />
-        </label>
+          <div className="space-y-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                aria-label="Telegram Chat ID"
+                className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+                id="telegramChatId"
+                name="telegramChatId"
+                onChange={(event) => setTelegramChatId(event.target.value)}
+                value={telegramChatId}
+              />
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#dae2fd] px-4 py-3 text-sm font-semibold text-[#3f465c] transition hover:bg-[#bec6e0] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={testingChannel !== null}
+                onClick={() => void sendTestNotification("telegram")}
+                type="button"
+              >
+                {testingChannel === "telegram" ? (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <Send aria-hidden="true" className="size-4" />
+                )}
+                发送测试消息
+              </button>
+            </div>
+            {telegramTestStatus ? (
+              <p className="text-sm font-medium text-on-surface-variant">
+                {telegramTestStatus}
+              </p>
+            ) : null}
+          </div>
+        </section>
 
-        <label
-          className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center"
-          htmlFor="emailRecipient"
-        >
+        <section className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center">
           <span className="text-sm font-medium text-on-surface-variant">邮件接收人</span>
-          <input
-            className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
-            defaultValue={values.emailRecipient}
-            id="emailRecipient"
-            name="emailRecipient"
-          />
-        </label>
+          <div className="space-y-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                aria-label="邮件接收人"
+                className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+                id="emailRecipient"
+                name="emailRecipient"
+                onChange={(event) => setEmailRecipient(event.target.value)}
+                value={emailRecipient}
+              />
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#dae2fd] px-4 py-3 text-sm font-semibold text-[#3f465c] transition hover:bg-[#bec6e0] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={testingChannel !== null}
+                onClick={() => void sendTestNotification("email")}
+                type="button"
+              >
+                {testingChannel === "email" ? (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <Mail aria-hidden="true" className="size-4" />
+                )}
+                发送测试邮件
+              </button>
+            </div>
+            {emailTestStatus ? (
+              <p className="text-sm font-medium text-on-surface-variant">
+                {emailTestStatus}
+              </p>
+            ) : null}
+          </div>
+        </section>
       </div>
 
       <div className="mt-5 flex items-center justify-between gap-4">

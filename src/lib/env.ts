@@ -20,8 +20,7 @@ export function readEnv(env: EnvInput = process.env): AppEnv {
     defaultTimezone: env.DEFAULT_TIMEZONE ?? "Asia/Shanghai",
     hasAmapKey: hasValue(env.AMAP_API_KEY),
     hasOpenAiKey: hasValue(env.OPENAI_API_KEY),
-    hasTelegramConfig:
-      hasValue(env.TELEGRAM_BOT_TOKEN) && hasValue(env.TELEGRAM_CHAT_ID),
+    hasTelegramConfig: hasValue(env.TELEGRAM_BOT_TOKEN),
     hasEmailConfig:
       hasValue(env.SMTP_HOST) &&
       hasValue(env.SMTP_USER) &&

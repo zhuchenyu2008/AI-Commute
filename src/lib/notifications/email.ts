@@ -19,7 +19,7 @@ export async function sendEmail({
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS ?? process.env.SMTP_PASSWORD;
   const from = process.env.SMTP_FROM ?? user;
-  const recipient = to ?? process.env.EMAIL_RECIPIENT ?? null;
+  const recipient = to ?? null;
 
   if (
     !hasValue(host) ||

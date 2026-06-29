@@ -417,7 +417,8 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
 
 const SYSTEM_PROMPT = `You are a personal commute-planning AI. Current dates should be interpreted in Beijing time.
 You must plan, calculate, compare, and decide yourself. The app only exposes tools; it will not hard-code route ranking, destination extraction, or buffer minutes for you.
-Available tools include user settings, memories, all AMap POI/weather/transit/walking/bicycling tools, create_trip, and current-route update tools. You may call tools for as many rounds as needed before timeout. Weather, route results, user preferences, and memories are evidence for your decision, not fixed app rules.`;
+Available tools include user settings, memories, all AMap POI/weather/transit/walking/bicycling tools, create_trip, and current-route update tools. You may call tools for as many rounds as needed before timeout. Weather, route results, user preferences, and memories are evidence for your decision, not fixed app rules.
+Final user-facing replies must be plain text without Markdown formatting, headings, code ticks, or list markers.`;
 
 async function createInitialMessages(
   session: { prompt: string; userId: string },
@@ -429,7 +430,7 @@ async function createInitialMessages(
     { role: "system", content: memoryContext },
     {
       role: "user",
-      content: `Planning attempt ${attempt}: ${session.prompt}`,
+      content: `第 ${attempt} 次规划尝试：${session.prompt}`,
     },
   ];
 
@@ -1084,7 +1085,7 @@ async function runConversationAttempt(input: {
     await createAssistantMessage({
       sessionId: input.sessionId,
       signal: input.signal,
-      content: assistantMessage.content || "AI requested tool calls.",
+      content: assistantMessage.content || "AI 已请求调用工具。",
       metadata: {
         toolCalls: assistantMessage.toolCalls?.map((toolCall) => ({
           id: toolCall.id,
@@ -1096,7 +1097,7 @@ async function runConversationAttempt(input: {
     const toolCalls = assistantMessage.toolCalls ?? [];
     if (toolCalls.length === 0) {
       if (input.requireCreateTrip) {
-        throw new Error("AI ended planning without calling create_trip.");
+        throw new Error("AI 结束了规划，但没有调用 create_trip。");
       }
 
       return {
@@ -1132,13 +1133,13 @@ async function runConversationAttempt(input: {
           await createAssistantMessage({
             sessionId: input.sessionId,
             signal: input.signal,
-            content: "AI created the planned trip.",
+            content: "AI 已创建规划行程。",
             metadata: { tripId: trip.id },
           });
 
           return {
             tripId: trip.id,
-            summary: "AI completed the commute planning through tool calls.",
+            summary: "AI 已通过工具调用完成通勤规划。",
           };
         }
       }
@@ -1382,7 +1383,7 @@ export async function runPlanningAttempt(
   await createAssistantMessage({
     sessionId,
     signal,
-    content: `Planning attempt ${attempt}: the AI may call tools until it creates the final trip.`,
+    content: `第 ${attempt} 次规划尝试：AI 可以持续调用工具，直到创建最终行程。`,
   });
 
   const result = await runConversationAttempt({
@@ -1396,7 +1397,7 @@ export async function runPlanningAttempt(
   });
 
   if (!result.tripId) {
-    throw new Error("AI ended planning without creating a trip.");
+    throw new Error("AI 结束了规划，但没有创建行程。");
   }
 
   return {

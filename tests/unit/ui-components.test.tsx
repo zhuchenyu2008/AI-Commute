@@ -27,6 +27,8 @@ const { routerPushMock } = vi.hoisted(() => ({
   routerPushMock: vi.fn(),
 }));
 
+const REDIRECT_DELAY_FOR_TESTS_MS = 1300;
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: routerPushMock,
@@ -36,6 +38,7 @@ vi.mock("next/navigation", () => ({
 describe("sample-aligned UI components", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     routerPushMock.mockReset();
@@ -174,6 +177,40 @@ describe("sample-aligned UI components", () => {
     expect(events.map((event) => event.title)).toEqual([
       "搜索地点",
       "智能体更新",
+    ]);
+  });
+
+  it("sanitizes assistant markdown while preserving user messages and tool details", () => {
+    const events = buildAgentEvents({
+      messages: [
+        {
+          id: "assistant-markdown",
+          role: "assistant",
+          content: "## **Route**\n- Take `Line 1`",
+          createdAt: "2026-06-28T08:01:00.000Z",
+        },
+        {
+          id: "user-markdown",
+          role: "user",
+          content: "## **Keep this**\n- use `raw`",
+          createdAt: "2026-06-28T08:02:00.000Z",
+        },
+      ],
+      toolCalls: [
+        {
+          id: "tool-markdown",
+          name: "search_poi",
+          status: "completed",
+          error: "**Tool** kept `raw`",
+          createdAt: "2026-06-28T08:03:00.000Z",
+        },
+      ],
+    });
+
+    expect(events.map((event) => event.detail)).toEqual([
+      "Route\nTake Line 1",
+      "## **Keep this**\n- use `raw`",
+      "**Tool** kept `raw`",
     ]);
   });
 
@@ -373,6 +410,89 @@ describe("sample-aligned UI components", () => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
+  it("redirects completed conversation sessions only after a continued run completes", async () => {
+    const completedSession = {
+      id: "session-1",
+      tripId: "trip-1",
+      status: "completed",
+      prompt: "去公司",
+      messages: [],
+      toolCalls: [],
+    };
+    const runningSession = {
+      ...completedSession,
+      status: "running",
+      messages: [
+        {
+          id: "message-1",
+          role: "user",
+          content: "再帮我看看下雨怎么办",
+          createdAt: "2026-06-29T00:00:00.000Z",
+        },
+      ],
+    };
+    const completedAfterContinuationSession = {
+      ...runningSession,
+      status: "completed",
+      messages: [
+        ...runningSession.messages,
+        {
+          id: "message-2",
+          role: "assistant",
+          content: "已完成更新",
+          createdAt: "2026-06-29T00:01:00.000Z",
+        },
+      ],
+    };
+    const getSessions = [
+      completedSession,
+      runningSession,
+      completedAfterContinuationSession,
+    ];
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === "/api/agent-sessions/session-1/messages") {
+        expect(init?.method).toBe("POST");
+        return Response.json({ status: "running" }, { status: 202 });
+      }
+
+      if (String(url) === "/api/agent-sessions/session-1") {
+        return Response.json({
+          session: getSessions.shift() ?? completedAfterContinuationSession,
+        });
+      }
+
+      return Response.json({ error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <AgentEventList allowMessages autoRedirect sessionId="session-1" />
+    );
+
+    const input = document.querySelector("input");
+    expect(input).toBeTruthy();
+    await new Promise((resolve) =>
+      window.setTimeout(resolve, REDIRECT_DELAY_FOR_TESTS_MS)
+    );
+    expect(routerPushMock).not.toHaveBeenCalled();
+
+    fireEvent.change(input!, {
+      target: { value: "再帮我看看下雨怎么办" },
+    });
+    fireEvent.click(document.querySelector('button[type="submit"]')!);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+    await screen.findByText("agent已完成规划");
+
+    await new Promise((resolve) =>
+      window.setTimeout(resolve, REDIRECT_DELAY_FOR_TESTS_MS)
+    );
+
+    expect(routerPushMock).toHaveBeenCalledWith("/trips/trip-1");
+  }, 10000);
+
   it("does not post continued messages while the session is running", async () => {
     const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       if (String(url) === "/api/agent-sessions/session-running") {
@@ -446,11 +566,78 @@ describe("sample-aligned UI components", () => {
     );
 
     expect(html).toContain("默认出发点");
+    expect(html).toContain("北京时间（Asia/Shanghai）");
     expect(html).toContain("通勤方式倾向");
     expect(html).toContain("公交地铁优先");
+    expect(html).toContain("appearance-none");
     expect(html).not.toContain("出发点坐标");
     expect(html).toContain('name="originLngLat"');
     expect(html).toContain('type="hidden"');
+  });
+
+  it("sends Telegram and email test notifications from settings", async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        String(url) === "/api/settings/test-notification" &&
+        init?.method === "POST"
+      ) {
+        return Response.json({
+          result: {
+            status: "sent",
+            recipient: JSON.parse(String(init.body)).telegramChatId ?? JSON.parse(String(init.body)).emailRecipient,
+          },
+        });
+      }
+
+      return Response.json({ error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <SettingsForm
+        values={{
+          defaultCity: "宁波",
+          timezone: "Asia/Shanghai",
+          originName: "",
+          originLngLat: "",
+          routePreference: "balanced",
+          telegramChatId: "telegram-chat",
+          emailRecipient: "user@example.com",
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "发送测试消息" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/settings/test-notification",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            channel: "telegram",
+            telegramChatId: "telegram-chat",
+          }),
+        })
+      );
+    });
+    await screen.findByText("Telegram 测试已发送");
+
+    fireEvent.click(screen.getByRole("button", { name: "发送测试邮件" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/settings/test-notification",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            channel: "email",
+            emailRecipient: "user@example.com",
+          }),
+        })
+      );
+    });
+    await screen.findByText("邮件测试已发送");
   });
 
   it("searches places with the edited default city and submits the selected origin", async () => {
