@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { AgentSessionAlreadyRunningError } from "@/lib/agent/planner";
 import { prisma } from "@/lib/db";
 import type { TelegramBotClient } from "@/lib/telegram/client";
 import { buildTripSwitchKeyboard } from "@/lib/telegram/commands";
@@ -255,7 +256,7 @@ describe("telegram agent update handler", () => {
     const bot = createMockBot();
     const agentBridge = createMockAgentBridge();
     agentBridge.continueSession.mockRejectedValue(
-      new Error("Session already running.")
+      new AgentSessionAlreadyRunningError()
     );
 
     await expect(
@@ -267,6 +268,30 @@ describe("telegram agent update handler", () => {
     ).resolves.toBeUndefined();
 
     expect(bot.sendMessage).toHaveBeenLastCalledWith({
+      chatId,
+      text: expect.stringContaining("\u7a0d\u540e"),
+    });
+  });
+
+  it("rethrows unknown continuation bridge errors so polling can retry", async () => {
+    const chatId = uniqueChatId("continue-unknown-error");
+    const user = await createTelegramUser("continue-unknown-error", chatId);
+    const trip = await createTrip(user.id, "Old commute", "monitoring");
+    const session = await createAgentSession(user.id, "completed", trip.id);
+    await createChatState(chatId, user.id, session.id, trip.id, "active");
+    const bot = createMockBot();
+    const agentBridge = createMockAgentBridge();
+    agentBridge.continueSession.mockRejectedValue(new Error("database down"));
+
+    await expect(
+      handleTelegramUpdate({
+        update: messageUpdate(chatId, "leave ten minutes earlier"),
+        bot,
+        agentBridge,
+      })
+    ).rejects.toThrow("database down");
+
+    expect(bot.sendMessage).not.toHaveBeenCalledWith({
       chatId,
       text: expect.stringContaining("\u7a0d\u540e"),
     });
@@ -386,6 +411,27 @@ describe("telegram agent update handler", () => {
       text: expect.stringContaining("Telegram Chat ID"),
     });
     expect(agentBridge.startPlanning).not.toHaveBeenCalled();
+    await expect(
+      prisma.telegramChatState.findUnique({ where: { chatId } })
+    ).resolves.toBeNull();
+  });
+
+  it("answers an ambiguous switch callback without changing state", async () => {
+    const chatId = uniqueChatId("callback-ambiguous");
+    await createTelegramUser("callback-ambiguous-one", chatId);
+    await createTelegramUser("callback-ambiguous-two", chatId);
+    const bot = createMockBot();
+
+    await handleTelegramUpdate({
+      update: callbackUpdate(chatId, "callback-ambiguous", "sw:trip-1"),
+      bot,
+      agentBridge: createMockAgentBridge(),
+    });
+
+    expect(bot.answerCallbackQuery).toHaveBeenCalledWith({
+      callbackQueryId: "callback-ambiguous",
+      text: expect.stringContaining("Telegram Chat ID"),
+    });
     await expect(
       prisma.telegramChatState.findUnique({ where: { chatId } })
     ).resolves.toBeNull();

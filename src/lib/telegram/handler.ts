@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
 import {
+  AgentSessionAlreadyRunningError,
+  AgentSessionNotFoundError,
+} from "@/lib/agent/planner";
+import {
   cancelTripMonitoring,
   TripMonitoringNotFoundError,
 } from "@/lib/trips/monitoring";
@@ -185,7 +189,16 @@ async function continueActiveSession(input: {
       sessionId: input.sessionId,
       message: input.message,
     });
-  } catch {
+  } catch (error) {
+    if (
+      !(
+        error instanceof AgentSessionAlreadyRunningError ||
+        error instanceof AgentSessionNotFoundError
+      )
+    ) {
+      throw error;
+    }
+
     await input.bot.sendMessage({
       chatId: input.chatId,
       text: "当前对话暂时不能继续处理，请稍后再试或发送 /new 重新规划。",
