@@ -161,6 +161,7 @@ export async function prepareConfiguration({
 }) {
   let document = parseDotEnv(envText ?? exampleText);
   let values = envDocumentToObject(document);
+  const originalValues = { ...values };
   const generatedResult = applyGeneratedDefaults(values, generator);
   values = generatedResult.values;
 
@@ -169,7 +170,7 @@ export async function prepareConfiguration({
   }
 
   for (const key of REQUIRED_KEYS) {
-    if (shouldPromptForKey({ key, args, values })) {
+    if (shouldPromptForKey({ key, args, values: originalValues })) {
       values[key] = await promptForKey({
         key,
         currentValue: values[key],

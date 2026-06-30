@@ -229,6 +229,7 @@ describe("native one-click deployment runtime planning", () => {
       ["OPENAI_BASE_URL", "https://api.openai.com/v1"],
       ["OPENAI_MODEL", "gpt-4o-mini"]
     ]);
+    const promptedKeys: string[] = [];
 
     const result = await prepareConfiguration({
       envText: [
@@ -244,11 +245,20 @@ describe("native one-click deployment runtime planning", () => {
       args: { configure: false, yes: false },
       prompt: async (question, defaultValue) => {
         const key = question.match(/^([A-Z0-9_]+)/)?.[1];
+        if (key) {
+          promptedKeys.push(key);
+        }
         return key ? answers.get(key) ?? defaultValue ?? "" : defaultValue ?? "";
       },
       generator: { token: (bytes) => `token-${bytes}` }
     });
 
+    expect(promptedKeys).toEqual([
+      "AMAP_API_KEY",
+      "OPENAI_API_KEY",
+      "OPENAI_BASE_URL",
+      "OPENAI_MODEL"
+    ]);
     expect(result.missing).toEqual([]);
     expect(result.values.AMAP_API_KEY).toBe("amap-key");
     expect(result.values.OPENAI_API_KEY).toBe("openai-key");
