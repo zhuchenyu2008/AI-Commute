@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -448,5 +449,29 @@ describe("native one-click deployment runtime planning", () => {
       .toEqual(["web", "scheduler"]);
     expect(buildServicePlan({ TELEGRAM_BOT_TOKEN: "bot-token" }).map((service) => service.name))
       .toEqual(["web", "scheduler", "telegram"]);
+  });
+});
+
+describe("native one-click deployment wrappers", () => {
+  it("exposes the start:all npm script", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(packageJson.scripts["start:all"]).toBe("node scripts/start-all.mjs");
+  });
+
+  it("provides Windows and Linux wrapper scripts", () => {
+    const ps1 = readFileSync("start-all.ps1", "utf8");
+    const cmd = readFileSync("start-all.cmd", "utf8");
+    const sh = readFileSync("start-all.sh", "utf8");
+
+    expect(ps1).toContain("scripts/start-all.mjs");
+    expect(ps1).toContain("-Configure");
+    expect(ps1).toContain("-Yes");
+    expect(cmd).toContain("start-all.ps1");
+    expect(sh).toContain("scripts/start-all.mjs");
+    expect(sh).toContain("--configure");
+    expect(sh).toContain("--yes");
   });
 });
