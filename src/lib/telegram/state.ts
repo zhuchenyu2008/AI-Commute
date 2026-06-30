@@ -75,8 +75,7 @@ export async function listSwitchableTrips(input: { userId: string }) {
       userId: input.userId,
       status: { not: "cancelled" },
     },
-    orderBy: [{ status: "desc" }, { createdAt: "desc" }],
-    take: 10,
+    orderBy: { createdAt: "desc" },
     include: {
       reminderJobs: {
         where: { status: "scheduled" },
@@ -95,6 +94,7 @@ export async function listSwitchableTrips(input: { userId: string }) {
       }
       return right.createdAt.getTime() - left.createdAt.getTime();
     })
+    .slice(0, 10)
     .map((trip) => ({
       id: trip.id,
       title: trip.title,
