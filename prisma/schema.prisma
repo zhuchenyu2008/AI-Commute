@@ -8,18 +8,19 @@ datasource db {
 }
 
 model User {
-  id               String            @id @default(cuid())
-  email            String            @unique
-  name             String
-  passwordHash     String
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  sessions         Session[]
-  settings         UserSettings?
-  agentSessions    AgentSession[]
-  trips            Trip[]
-  memories         Memory[]
-  memoryCandidates MemoryCandidate[]
+  id                 String              @id @default(cuid())
+  email              String              @unique
+  name               String
+  passwordHash       String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  sessions           Session[]
+  settings           UserSettings?
+  agentSessions      AgentSession[]
+  trips              Trip[]
+  memories           Memory[]
+  memoryCandidates   MemoryCandidate[]
+  telegramChatStates TelegramChatState[]
 }
 
 model Session {
@@ -61,10 +62,11 @@ model AgentSession {
   timeoutMs   Int             @default(600000)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trip        Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
-  messages    AgentMessage[]
-  toolCalls   AgentToolCall[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip               Trip?               @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  messages           AgentMessage[]
+  toolCalls          AgentToolCall[]
+  telegramChatStates TelegramChatState[]
 
   @@index([userId])
   @@index([tripId])
@@ -112,13 +114,14 @@ model Trip {
   finalStopName   String?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agentSessions   AgentSession[]
-  stops           TripStop[]
-  legs            TripLeg[]
-  reminderJobs    ReminderJob[]
-  recalculations  RecalculationLog[]
-  notifications   NotificationLog[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentSessions      AgentSession[]
+  stops              TripStop[]
+  legs               TripLeg[]
+  reminderJobs       ReminderJob[]
+  recalculations     RecalculationLog[]
+  notifications      NotificationLog[]
+  telegramChatStates TelegramChatState[]
 
   @@index([userId])
   @@index([status])
@@ -293,6 +296,31 @@ model NotificationLog {
   @@index([channel])
   @@index([status])
   @@unique([dedupeKey])
+}
+
+model TelegramChatState {
+  id                   String        @id @default(cuid())
+  chatId               String   @unique
+  userId               String
+  activeAgentSessionId String?
+  activeTripId         String?
+  mode                 String   @default("idle")
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeAgentSession   AgentSession? @relation(fields: [activeAgentSessionId], references: [id], onDelete: SetNull)
+  activeTrip           Trip?         @relation(fields: [activeTripId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([activeAgentSessionId])
+  @@index([activeTripId])
+  @@index([mode])
+}
+
+model TelegramBotState {
+  id           String   @id
+  lastUpdateId         Int?
+  updatedAt    DateTime @updatedAt
 }
 
 model Memory {

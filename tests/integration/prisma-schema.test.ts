@@ -66,4 +66,28 @@ describe("Prisma schema", () => {
     expect(optionalOriginMigration).not.toContain('"originName" TEXT NOT NULL');
     expect(optionalOriginMigration).not.toContain('"originLngLat" TEXT NOT NULL');
   });
+
+  it("stores Telegram chat state and bot polling offsets", () => {
+    const telegramMigration = readFileSync(
+      "prisma/migrations/20260630090000_telegram_agent_entry/migration.sql",
+      "utf8"
+    );
+
+    for (const model of ["TelegramChatState", "TelegramBotState"]) {
+      expect(schema).toContain(`model ${model}`);
+    }
+
+    expect(schema).toContain("telegramChatStates TelegramChatState[]");
+    expect(schema).toContain("chatId               String   @unique");
+    expect(schema).toContain("activeAgentSessionId String?");
+    expect(schema).toContain("activeTripId         String?");
+    expect(schema).toContain('mode                 String   @default("idle")');
+    expect(schema).toContain("lastUpdateId         Int?");
+
+    expect(telegramMigration).toContain('CREATE TABLE "TelegramChatState"');
+    expect(telegramMigration).toContain(
+      'CREATE UNIQUE INDEX "TelegramChatState_chatId_key"'
+    );
+    expect(telegramMigration).toContain('CREATE TABLE "TelegramBotState"');
+  });
 });
