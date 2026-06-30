@@ -322,6 +322,75 @@ describe("native one-click deployment runtime planning", () => {
     expect(result.missing).toEqual([]);
   });
 
+  it("redacts configured secrets in configure prompts while preserving defaults", async () => {
+    const { prepareConfiguration } = await loadRuntimeStartAll();
+    const questions: string[] = [];
+
+    const result = await prepareConfiguration({
+      envText: [
+        "DATABASE_URL=file:./data/commute.db",
+        "DEFAULT_CITY=宁波",
+        "DEFAULT_TIMEZONE=Asia/Shanghai",
+        "AMAP_API_KEY=amap-secret",
+        "OPENAI_API_KEY=sk-secret",
+        "OPENAI_BASE_URL=https://api.openai.com/v1",
+        "OPENAI_MODEL=gpt-4o-mini"
+      ].join("\n"),
+      exampleText: "",
+      args: { configure: true, yes: false },
+      prompt: async (question) => {
+        questions.push(question);
+        return "";
+      },
+      generator: { token: (bytes) => `token-${bytes}` }
+    });
+
+    const amapQuestion = questions.find((question) =>
+      question.startsWith("AMAP_API_KEY")
+    );
+    const openAiQuestion = questions.find((question) =>
+      question.startsWith("OPENAI_API_KEY")
+    );
+
+    expect(amapQuestion).not.toContain("amap-secret");
+    expect(openAiQuestion).not.toContain("sk-secret");
+    expect(amapQuestion).toContain("[configured]");
+    expect(openAiQuestion).toContain("[configured]");
+    expect(result.values.AMAP_API_KEY).toBe("amap-secret");
+    expect(result.values.OPENAI_API_KEY).toBe("sk-secret");
+  });
+
+  it("does not prompt for existing service config in interactive mode", async () => {
+    const { prepareConfiguration } = await loadRuntimeStartAll();
+
+    const result = await prepareConfiguration({
+      envText: [
+        "DATABASE_URL=file:./data/commute.db",
+        "DEFAULT_CITY=宁波",
+        "DEFAULT_TIMEZONE=Asia/Shanghai",
+        "AMAP_API_KEY=amap-key",
+        "OPENAI_API_KEY=openai-key",
+        "OPENAI_BASE_URL=https://api.openai.com/v1",
+        "OPENAI_MODEL=gpt-4o-mini"
+      ].join("\n"),
+      exampleText: "",
+      args: { configure: false, yes: false },
+      prompt: async () => {
+        throw new Error("prompt should not be called when service config exists");
+      },
+      generator: { token: (bytes) => `token-${bytes}` }
+    });
+
+    expect(result.values.AMAP_API_KEY).toBe("amap-key");
+    expect(result.values.OPENAI_API_KEY).toBe("openai-key");
+    expect(result.values.OPENAI_BASE_URL).toBe("https://api.openai.com/v1");
+    expect(result.values.OPENAI_MODEL).toBe("gpt-4o-mini");
+    expect(result.envText).toContain("AMAP_API_KEY=amap-key");
+    expect(result.envText).toContain("OPENAI_API_KEY=openai-key");
+    expect(result.envText).toContain("OPENAI_BASE_URL=https://api.openai.com/v1");
+    expect(result.envText).toContain("OPENAI_MODEL=gpt-4o-mini");
+  });
+
   it("preserves existing optional runtime values during preparation", async () => {
     const { prepareConfiguration } = await loadRuntimeStartAll();
 

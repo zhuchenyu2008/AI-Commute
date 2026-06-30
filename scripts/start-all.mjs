@@ -25,6 +25,14 @@ const INTERACTIVE_PROMPT_KEYS = [
   "OPENAI_MODEL"
 ];
 
+const SENSITIVE_KEYS = new Set([
+  "AMAP_API_KEY",
+  "OPENAI_API_KEY",
+  "TELEGRAM_BOT_TOKEN",
+  "SMTP_PASS",
+  "SMTP_PASSWORD"
+]);
+
 export function parseArgs(argv) {
   return {
     configure: argv.includes("--configure"),
@@ -141,7 +149,9 @@ export function validateRequiredConfig(values) {
 
 async function promptForKey({ key, currentValue, prompt }) {
   const defaultValue = currentValue?.trim() || GENERATED_DEFAULTS[key] || "";
-  const suffix = defaultValue ? ` [${defaultValue}]` : "";
+  const displayValue =
+    defaultValue && SENSITIVE_KEYS.has(key) ? "configured" : defaultValue;
+  const suffix = displayValue ? ` [${displayValue}]` : "";
   const answer = await prompt(`${key}${suffix}: `, defaultValue);
 
   return answer.trim() || defaultValue;
