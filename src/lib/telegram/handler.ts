@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { cancelTripMonitoring } from "@/lib/trips/monitoring";
+import {
+  cancelTripMonitoring,
+  TripMonitoringNotFoundError,
+} from "@/lib/trips/monitoring";
 import type { TelegramBotClient } from "./client";
 import {
   buildTripSwitchKeyboard,
@@ -33,6 +36,39 @@ export type HandleTelegramUpdateInput = {
 
 type BoundUser = { chatId: string; userId: string };
 
+function logTelegramSendFailure(context: string, error: unknown) {
+  console.error(`Telegram ${context} send failed.`, error);
+}
+
+async function sendBestEffort(
+  bot: TelegramBotClient,
+  input: Parameters<TelegramBotClient["sendMessage"]>[0],
+  context: string
+) {
+  try {
+    await bot.sendMessage(input);
+  } catch (error) {
+    logTelegramSendFailure(context, error);
+  }
+}
+
+async function getBoundChatState(chatId: string, userId: string) {
+  const state = await getTelegramChatState(chatId);
+  if (!state || state.userId !== userId) return null;
+  return state;
+}
+
+async function clearBoundChatState(input: { chatId: string; userId: string }) {
+  await prisma.telegramChatState.updateMany({
+    where: { chatId: input.chatId, userId: input.userId },
+    data: {
+      activeAgentSessionId: null,
+      activeTripId: null,
+      mode: "idle",
+    },
+  });
+}
+
 async function resolveBoundUser(input: {
   chatId: string;
   bot: TelegramBotClient;
@@ -51,6 +87,42 @@ async function resolveBoundUser(input: {
     await input.bot.sendMessage({
       chatId: input.chatId,
       text: "多个用户绑定同一个 Telegram Chat ID，请先在网站设置页修正。",
+    });
+    return null;
+  }
+
+  return { chatId: input.chatId, userId: result.user.id };
+}
+
+async function resolveCallbackBoundUser(input: {
+  chatId: string;
+  callbackQueryId: string;
+  bot: TelegramBotClient;
+}): Promise<BoundUser | null> {
+  const result = await findBoundTelegramUser(input.chatId);
+
+  if (result.status === "unbound") {
+    const text = formatUnboundMessage(input.chatId);
+    await input.bot.answerCallbackQuery({
+      callbackQueryId: input.callbackQueryId,
+      text,
+    });
+    await input.bot.sendMessage({
+      chatId: input.chatId,
+      text,
+    });
+    return null;
+  }
+
+  if (result.status === "ambiguous") {
+    const text = "多个用户绑定同一个 Telegram Chat ID，请先在网站设置页修正。";
+    await input.bot.answerCallbackQuery({
+      callbackQueryId: input.callbackQueryId,
+      text,
+    });
+    await input.bot.sendMessage({
+      chatId: input.chatId,
+      text,
     });
     return null;
   }
@@ -82,10 +154,14 @@ async function startNewPlanning(input: {
     tripId: result.tripId,
   });
 
-  await input.bot.sendMessage({
-    chatId: input.chatId,
-    text: result.summary,
-  });
+  await sendBestEffort(
+    input.bot,
+    {
+      chatId: input.chatId,
+      text: result.summary,
+    },
+    "planning summary"
+  );
 }
 
 async function continueActiveSession(input: {
@@ -102,11 +178,20 @@ async function continueActiveSession(input: {
     text: "收到，我继续处理。",
   });
 
-  const result = await input.bridge.continueSession({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    message: input.message,
-  });
+  let result: Awaited<ReturnType<TelegramAgentBridge["continueSession"]>>;
+  try {
+    result = await input.bridge.continueSession({
+      userId: input.userId,
+      sessionId: input.sessionId,
+      message: input.message,
+    });
+  } catch {
+    await input.bot.sendMessage({
+      chatId: input.chatId,
+      text: "当前对话暂时不能继续处理，请稍后再试或发送 /new 重新规划。",
+    });
+    return;
+  }
 
   await setTelegramActiveConversation({
     chatId: input.chatId,
@@ -115,10 +200,14 @@ async function continueActiveSession(input: {
     tripId: result.tripId ?? input.fallbackTripId ?? null,
   });
 
-  await input.bot.sendMessage({
-    chatId: input.chatId,
-    text: result.summary,
-  });
+  await sendBestEffort(
+    input.bot,
+    {
+      chatId: input.chatId,
+      text: result.summary,
+    },
+    "continuation summary"
+  );
 }
 
 async function handlePlainText(input: {
@@ -128,11 +217,20 @@ async function handlePlainText(input: {
   userId: string;
   text: string;
 }) {
-  const state = await getTelegramChatState(input.chatId);
+  const text = input.text.trim();
+  if (!text) {
+    await input.bot.sendMessage({
+      chatId: input.chatId,
+      text: "请发送具体的出行需求或命令。",
+    });
+    return;
+  }
+
+  const state = await getBoundChatState(input.chatId, input.userId);
   const activeSessionId = state?.activeAgentSessionId;
 
   if (state?.mode === "awaiting_new_prompt" || !activeSessionId) {
-    await startNewPlanning({ ...input, prompt: input.text });
+    await startNewPlanning({ ...input, prompt: text });
     return;
   }
 
@@ -141,7 +239,7 @@ async function handlePlainText(input: {
   });
 
   if (!session) {
-    await startNewPlanning({ ...input, prompt: input.text });
+    await startNewPlanning({ ...input, prompt: text });
     return;
   }
 
@@ -156,7 +254,7 @@ async function handlePlainText(input: {
   await continueActiveSession({
     ...input,
     sessionId: activeSessionId,
-    message: input.text,
+    message: text,
     fallbackTripId: state.activeTripId,
   });
 }
@@ -180,7 +278,7 @@ async function handleMessage(input: Required<HandleTelegramUpdateInput>) {
   const command = parseTelegramCommand(message.text);
 
   if (command.kind === "start") {
-    const state = await getTelegramChatState(chatId);
+    const state = await getBoundChatState(chatId, bound.userId);
     await input.bot.sendMessage({
       chatId,
       text: formatBoundHelpMessage({ hasActiveTrip: Boolean(state?.activeTripId) }),
@@ -224,7 +322,7 @@ async function handleMessage(input: Required<HandleTelegramUpdateInput>) {
   }
 
   if (command.kind === "cancel") {
-    const state = await getTelegramChatState(chatId);
+    const state = await getBoundChatState(chatId, bound.userId);
     if (!state?.activeTripId) {
       await input.bot.sendMessage({
         chatId,
@@ -233,10 +331,24 @@ async function handleMessage(input: Required<HandleTelegramUpdateInput>) {
       return;
     }
 
-    await cancelTripMonitoring({
-      tripId: state.activeTripId,
-      userId: bound.userId,
-    });
+    try {
+      await cancelTripMonitoring({
+        tripId: state.activeTripId,
+        userId: bound.userId,
+      });
+    } catch (error) {
+      if (error instanceof TripMonitoringNotFoundError) {
+        await clearBoundChatState({ chatId, userId: bound.userId });
+        await input.bot.sendMessage({
+          chatId,
+          text: "当前没有可取消监控的行程。",
+        });
+        return;
+      }
+      throw error;
+    }
+
+    await clearBoundChatState({ chatId, userId: bound.userId });
     await input.bot.sendMessage({
       chatId,
       text: "已取消当前行程监控。",
@@ -245,7 +357,7 @@ async function handleMessage(input: Required<HandleTelegramUpdateInput>) {
   }
 
   if (command.kind === "status") {
-    const state = await getTelegramChatState(chatId);
+    const state = await getBoundChatState(chatId, bound.userId);
     await input.bot.sendMessage({
       chatId,
       text: state?.activeTripId
@@ -277,7 +389,11 @@ async function handleCallbackQuery(input: Required<HandleTelegramUpdateInput>) {
   if (!callback?.message) return;
 
   const chatId = String(callback.message.chat.id);
-  const bound = await resolveBoundUser({ chatId, bot: input.bot });
+  const bound = await resolveCallbackBoundUser({
+    chatId,
+    callbackQueryId: callback.id,
+    bot: input.bot,
+  });
   if (!bound) return;
 
   const action = parseTelegramCallbackData(callback.data);
@@ -307,10 +423,14 @@ async function handleCallbackQuery(input: Required<HandleTelegramUpdateInput>) {
     callbackQueryId: callback.id,
     text: `已切换到：${result.trip.title}`,
   });
-  await input.bot.sendMessage({
-    chatId,
-    text: `已切换到：${result.trip.title}。后续普通消息会继续和该行程的 Agent 对话。`,
-  });
+  await sendBestEffort(
+    input.bot,
+    {
+      chatId,
+      text: `已切换到：${result.trip.title}。后续普通消息会继续和该行程的 Agent 对话。`,
+    },
+    "callback switch confirmation"
+  );
 }
 
 export async function handleTelegramUpdate(

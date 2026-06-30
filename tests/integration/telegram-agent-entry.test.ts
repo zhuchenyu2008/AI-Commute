@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import type { TelegramBotClient } from "@/lib/telegram/client";
 import { buildTripSwitchKeyboard } from "@/lib/telegram/commands";
@@ -27,6 +27,10 @@ describe("telegram agent update handler", () => {
     await prisma.trip.deleteMany();
     await prisma.userSettings.deleteMany();
     await prisma.user.deleteMany();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("replies with binding instructions for an unbound /start without creating agent state", async () => {
@@ -90,6 +94,44 @@ describe("telegram agent update handler", () => {
       chatId,
       text: "Planning summary.",
     });
+  });
+
+  it("keeps persisted /new planning state when the final summary message fails", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const chatId = uniqueChatId("new-summary-fails");
+    const user = await createTelegramUser("new-summary-fails", chatId);
+    const trip = await createTrip(user.id, "Office commute", "planning");
+    const session = await createAgentSession(user.id, "completed", trip.id);
+    const bot = createMockBot();
+    bot.sendMessage
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Telegram send failed"));
+    const agentBridge = createMockAgentBridge();
+    agentBridge.startPlanning.mockResolvedValue({
+      sessionId: session.id,
+      tripId: trip.id,
+      summary: "Planning summary.",
+    });
+
+    await expect(
+      handleTelegramUpdate({
+        update: messageUpdate(chatId, "/new arrive at office by 9"),
+        bot,
+        agentBridge,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(agentBridge.startPlanning).toHaveBeenCalledTimes(1);
+    await expect(
+      prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+    ).resolves.toMatchObject({
+      activeAgentSessionId: session.id,
+      activeTripId: trip.id,
+      mode: "active",
+    });
+    expect(consoleError).toHaveBeenCalled();
   });
 
   it("sets awaiting_new_prompt mode when /new has no prompt", async () => {
@@ -164,6 +206,72 @@ describe("telegram agent update handler", () => {
     });
   });
 
+  it("keeps persisted continuation state when the final summary message fails", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const chatId = uniqueChatId("continue-summary-fails");
+    const user = await createTelegramUser("continue-summary-fails", chatId);
+    const oldTrip = await createTrip(user.id, "Old commute", "monitoring");
+    const nextTrip = await createTrip(user.id, "Updated commute", "monitoring");
+    const session = await createAgentSession(user.id, "completed", oldTrip.id);
+    await createChatState(chatId, user.id, session.id, oldTrip.id, "active");
+    const bot = createMockBot();
+    bot.sendMessage
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Telegram send failed"));
+    const agentBridge = createMockAgentBridge();
+    agentBridge.continueSession.mockResolvedValue({
+      sessionId: session.id,
+      tripId: nextTrip.id,
+      summary: "Updated summary.",
+    });
+
+    await expect(
+      handleTelegramUpdate({
+        update: messageUpdate(chatId, "leave ten minutes earlier"),
+        bot,
+        agentBridge,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(agentBridge.continueSession).toHaveBeenCalledTimes(1);
+    await expect(
+      prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+    ).resolves.toMatchObject({
+      activeAgentSessionId: session.id,
+      activeTripId: nextTrip.id,
+      mode: "active",
+    });
+    expect(consoleError).toHaveBeenCalled();
+  });
+
+  it("replies without throwing when continuation bridge rejects", async () => {
+    const chatId = uniqueChatId("continue-reject");
+    const user = await createTelegramUser("continue-reject", chatId);
+    const trip = await createTrip(user.id, "Old commute", "monitoring");
+    const session = await createAgentSession(user.id, "completed", trip.id);
+    await createChatState(chatId, user.id, session.id, trip.id, "active");
+    const bot = createMockBot();
+    const agentBridge = createMockAgentBridge();
+    agentBridge.continueSession.mockRejectedValue(
+      new Error("Session already running.")
+    );
+
+    await expect(
+      handleTelegramUpdate({
+        update: messageUpdate(chatId, "leave ten minutes earlier"),
+        bot,
+        agentBridge,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(bot.sendMessage).toHaveBeenLastCalledWith({
+      chatId,
+      text: expect.stringContaining("\u7a0d\u540e"),
+    });
+  });
+
   it("rejects plain text while the active agent session is running", async () => {
     const chatId = uniqueChatId("running");
     const user = await createTelegramUser("running", chatId);
@@ -182,6 +290,25 @@ describe("telegram agent update handler", () => {
     expect(bot.sendMessage).toHaveBeenCalledWith({
       chatId,
       text: expect.stringContaining("\u667a\u80fd\u4f53\u8fd8\u5728\u5904\u7406"),
+    });
+  });
+
+  it("asks for a concrete request when plain text is blank", async () => {
+    const chatId = uniqueChatId("blank");
+    await createTelegramUser("blank", chatId);
+    const bot = createMockBot();
+    const agentBridge = createMockAgentBridge();
+
+    await handleTelegramUpdate({
+      update: messageUpdate(chatId, "   "),
+      bot,
+      agentBridge,
+    });
+
+    expect(agentBridge.startPlanning).not.toHaveBeenCalled();
+    expect(bot.sendMessage).toHaveBeenCalledWith({
+      chatId,
+      text: expect.stringContaining("\u5177\u4f53\u7684\u51fa\u884c\u9700\u6c42"),
     });
   });
 
@@ -243,6 +370,58 @@ describe("telegram agent update handler", () => {
     });
   });
 
+  it("answers an unbound switch callback and does not create state", async () => {
+    const chatId = uniqueChatId("callback-unbound");
+    const bot = createMockBot();
+    const agentBridge = createMockAgentBridge();
+
+    await handleTelegramUpdate({
+      update: callbackUpdate(chatId, "callback-unbound", "sw:trip-1"),
+      bot,
+      agentBridge,
+    });
+
+    expect(bot.answerCallbackQuery).toHaveBeenCalledWith({
+      callbackQueryId: "callback-unbound",
+      text: expect.stringContaining("Telegram Chat ID"),
+    });
+    expect(agentBridge.startPlanning).not.toHaveBeenCalled();
+    await expect(
+      prisma.telegramChatState.findUnique({ where: { chatId } })
+    ).resolves.toBeNull();
+  });
+
+  it("keeps switched callback state when the confirmation message fails", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const chatId = uniqueChatId("callback-message-fails");
+    const user = await createTelegramUser("callback-message-fails", chatId);
+    const trip = await createTrip(user.id, "Airport commute", "monitoring");
+    const bot = createMockBot();
+    bot.sendMessage.mockRejectedValueOnce(new Error("Telegram send failed"));
+
+    await expect(
+      handleTelegramUpdate({
+        update: callbackUpdate(chatId, "callback-fails", `sw:${trip.id}`),
+        bot,
+        agentBridge: createMockAgentBridge(),
+      })
+    ).resolves.toBeUndefined();
+
+    expect(bot.answerCallbackQuery).toHaveBeenCalledWith({
+      callbackQueryId: "callback-fails",
+      text: `\u5df2\u5207\u6362\u5230\uff1a${trip.title}`,
+    });
+    await expect(
+      prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+    ).resolves.toMatchObject({
+      activeTripId: trip.id,
+      mode: "active",
+    });
+    expect(consoleError).toHaveBeenCalled();
+  });
+
   it("answers invalid callbacks without changing active state", async () => {
     const chatId = uniqueChatId("bad-callback");
     const user = await createTelegramUser("bad-callback", chatId);
@@ -266,6 +445,122 @@ describe("telegram agent update handler", () => {
     ).resolves.toMatchObject({
       activeAgentSessionId: session.id,
       activeTripId: trip.id,
+      mode: "active",
+    });
+  });
+
+  it("clears active state after cancelling the current trip", async () => {
+    const chatId = uniqueChatId("cancel");
+    const user = await createTelegramUser("cancel", chatId);
+    const trip = await createTrip(user.id, "Cancel commute", "monitoring");
+    const session = await createAgentSession(user.id, "completed", trip.id);
+    await createChatState(chatId, user.id, session.id, trip.id, "active");
+    const bot = createMockBot();
+
+    await handleTelegramUpdate({
+      update: messageUpdate(chatId, "/cancel"),
+      bot,
+      agentBridge: createMockAgentBridge(),
+    });
+
+    await expect(
+      prisma.trip.findUniqueOrThrow({ where: { id: trip.id } })
+    ).resolves.toMatchObject({ status: "cancelled" });
+    await expect(
+      prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+    ).resolves.toMatchObject({
+      activeAgentSessionId: null,
+      activeTripId: null,
+      mode: "idle",
+    });
+  });
+
+  it("clears stale active state when cancel cannot find the active trip for the bound user", async () => {
+    const chatId = uniqueChatId("cancel-stale");
+    const user = await createTelegramUser("cancel-stale", chatId);
+    const foreignUser = await createTelegramUser("cancel-stale-foreign", null);
+    const foreignTrip = await createTrip(
+      foreignUser.id,
+      "Foreign commute",
+      "monitoring"
+    );
+    const session = await createAgentSession(user.id, "completed", null);
+    await createChatState(chatId, user.id, session.id, foreignTrip.id, "active");
+    const bot = createMockBot();
+
+    await expect(
+      handleTelegramUpdate({
+        update: messageUpdate(chatId, "/cancel"),
+        bot,
+        agentBridge: createMockAgentBridge(),
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(
+      prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+    ).resolves.toMatchObject({
+      activeAgentSessionId: null,
+      activeTripId: null,
+      mode: "idle",
+    });
+    expect(bot.sendMessage).toHaveBeenCalledWith({
+      chatId,
+      text: expect.stringContaining("\u6ca1\u6709\u53ef\u53d6\u6d88"),
+    });
+  });
+
+  it("ignores stale chat state from a previously bound user for status and plain text", async () => {
+    const chatId = uniqueChatId("stale-state");
+    const oldUser = await createTelegramUser("stale-old", chatId);
+    const oldTrip = await createTrip(oldUser.id, "Old commute", "monitoring");
+    const oldSession = await createAgentSession(
+      oldUser.id,
+      "completed",
+      oldTrip.id
+    );
+    await createChatState(chatId, oldUser.id, oldSession.id, oldTrip.id, "active");
+    await prisma.userSettings.update({
+      where: { userId: oldUser.id },
+      data: { telegramChatId: null },
+    });
+    const newUser = await createTelegramUser("stale-new", chatId);
+    const newTrip = await createTrip(newUser.id, "New commute", "planning");
+    const newSession = await createAgentSession(newUser.id, "completed", newTrip.id);
+    const bot = createMockBot();
+    const agentBridge = createMockAgentBridge();
+    agentBridge.startPlanning.mockResolvedValue({
+      sessionId: newSession.id,
+      tripId: newTrip.id,
+      summary: "New planning summary.",
+    });
+
+    await handleTelegramUpdate({
+      update: messageUpdate(chatId, "/status"),
+      bot,
+      agentBridge,
+    });
+    expect(bot.sendMessage).toHaveBeenLastCalledWith({
+      chatId,
+      text: expect.stringContaining("/new"),
+    });
+
+    await handleTelegramUpdate({
+      update: messageUpdate(chatId, "plan for the new user"),
+      bot,
+      agentBridge,
+    });
+
+    expect(agentBridge.continueSession).not.toHaveBeenCalled();
+    expect(agentBridge.startPlanning).toHaveBeenCalledWith({
+      userId: newUser.id,
+      prompt: "plan for the new user",
+    });
+    await expect(
+      prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+    ).resolves.toMatchObject({
+      userId: newUser.id,
+      activeAgentSessionId: newSession.id,
+      activeTripId: newTrip.id,
       mode: "active",
     });
   });
@@ -319,7 +614,7 @@ function uniqueChatId(label: string) {
   return `${label}-${Date.now()}-${Math.random()}`;
 }
 
-async function createTelegramUser(label: string, chatId: string) {
+async function createTelegramUser(label: string, chatId: string | null) {
   return prisma.user.create({
     data: {
       email: `${label}-${Date.now()}-${Math.random()}@example.com`,
