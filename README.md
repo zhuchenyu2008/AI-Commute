@@ -131,25 +131,26 @@ SQLite 数据会持久化到 `./data`，并在容器内挂载到 `/app/data`。`
 - `DEFAULT_TIMEZONE`：默认时区，例如 `Asia/Shanghai`。
 - `AMAP_API_KEY`：AMap API key；未配置时会使用 mock AMap client，适合本地测试。
 - `OPENAI_API_KEY`：兼容 OpenAI 的规划运行器凭证。
+- `OPENAI_BASE_URL`：兼容 OpenAI 接口的自定义 base URL；未配置时使用官方默认。
+- `OPENAI_MODEL`：规划运行器使用的模型名；未配置时使用代码默认值。
 - `SEED_USER_EMAIL`：覆盖种子用户邮箱。
 - `SEED_USER_PASSWORD`：覆盖种子用户密码。
 - `SCHEDULER_TICK_SECRET`：保护 scheduler tick API 的 shared secret。
 
-默认出发点不通过环境变量配置。用户登录后需要在设置页通过地点搜索选择默认出发点，系统会保存地点名称和坐标。
+默认出发点和通知接收人不通过环境变量配置。用户登录后需要在设置页通过地点搜索选择默认出发点，并填写 Telegram Chat ID 或邮件接收人；系统会保存这些用户级设置。
 
 Telegram 通知：
 
 - `TELEGRAM_BOT_TOKEN`：Telegram bot token。
-- `TELEGRAM_CHAT_ID`：默认 Telegram chat id。用户设置中的 `telegramChatId` 可以覆盖默认接收方。
 
 Email 通知：
 
 - `SMTP_HOST`：SMTP 主机。
 - `SMTP_USER`：SMTP 用户名。
-- `SMTP_PASS` 或 `SMTP_PASSWORD`：SMTP 密码。
+- `SMTP_PASS`：SMTP 密码。代码也兼容 `SMTP_PASSWORD`，但 `.env.example` 默认使用 `SMTP_PASS`。
 - `SMTP_PORT`：SMTP 端口，默认 `587`。
 - `SMTP_SECURE`：设为 `true` 时使用 secure SMTP。
 - `SMTP_FROM`：发件人；未配置时使用 `SMTP_USER`。
-- `EMAIL_RECIPIENT`：默认收件人。用户设置中的 `emailRecipient` 可以覆盖默认接收方。
+- `SMTP_TLS_USE_SYSTEM_CA`：设为 `true` 时尝试加载系统 CA，用于处理本机已信任但 Node.js 默认不信任的 SMTP 证书链。
 
 通知 adapter 配置不完整时，发送会被跳过并记录状态，不会阻塞调度器继续处理其他 reminder jobs。

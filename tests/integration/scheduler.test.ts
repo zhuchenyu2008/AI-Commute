@@ -43,15 +43,9 @@ describe("scheduler reminder processing", () => {
   });
 
   it("locks due jobs, recalculates, logs notifications, and marks skipped without delivery config", async () => {
-    const earliestScheduled = await prisma.reminderJob.findFirst({
-      where: { status: "scheduled" },
-      orderBy: { scheduledFor: "asc" },
-      select: { scheduledFor: true },
-    });
-    const now = earliestScheduled
-      ? new Date(earliestScheduled.scheduledFor.getTime() - 60_000)
-      : new Date("2026-07-01T08:30:00.000Z");
-    const email = `scheduler-${Date.now()}@example.com`;
+    const now = new Date("2000-01-01T08:30:00.000Z");
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const email = `scheduler-${uniqueId}@example.com`;
 
     const user = await prisma.user.create({
       data: {
@@ -61,7 +55,7 @@ describe("scheduler reminder processing", () => {
         settings: {
           create: {
             originLngLat: "121.5230315924,29.8652491273",
-            telegramChatId: "telegram-chat-1",
+            telegramChatId: `telegram-chat-${uniqueId}`,
             emailRecipient: "scheduler@example.com",
           },
         },

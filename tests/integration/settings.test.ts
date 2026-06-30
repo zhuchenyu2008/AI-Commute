@@ -8,9 +8,10 @@ describe("settings persistence", () => {
   });
 
   it("stores commute defaults needed by the planner", async () => {
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const user = await prisma.user.create({
       data: {
-        email: `settings-${Date.now()}@example.com`,
+        email: `settings-${uniqueId}@example.com`,
         name: "Settings User",
         passwordHash: "hash",
         settings: {
@@ -20,7 +21,7 @@ describe("settings persistence", () => {
             originName: "家",
             originLngLat: "121.5230315924,29.8652491273",
             routePreference: "balanced",
-            telegramChatId: "telegram:-100",
+            telegramChatId: `telegram:${uniqueId}`,
             emailRecipient: "user@example.com"
           }
         }
