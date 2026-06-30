@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { GlassCard } from "@/components/glass-card";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { getBeijingDayRange } from "@/lib/history/day-filter";
 
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -32,15 +33,37 @@ function formatStatus(status: string) {
   return labels[status] ?? status;
 }
 
-export default async function HistoryPage() {
+const statusClasses: Record<string, string> = {
+  cancelled: "bg-[#eeeef7] text-[#5d6072]",
+  completed: "bg-[#eef7f1] text-[#16633c]",
+  failed: "bg-[#ffdad6] text-[#93000a]",
+  monitoring: "bg-[#dcfce7] text-[#166534]",
+  scheduled: "bg-[#dbeafe] text-[#1e40af]",
+};
+
+type HistoryPageProps = {
+  searchParams?: Promise<{
+    date?: string;
+  }>;
+};
+
+export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
+  const params = await searchParams;
+  const dayRange = getBeijingDayRange(params?.date);
   const trips = await prisma.trip.findMany({
-    where: { userId: user.id },
+    where: {
+      userId: user.id,
+      createdAt: {
+        gte: dayRange.start,
+        lt: dayRange.end,
+      },
+    },
     orderBy: { createdAt: "desc" },
     include: {
       legs: {
@@ -58,12 +81,33 @@ export default async function HistoryPage() {
             行程归档
           </p>
           <h1 className="mt-1 text-3xl font-bold text-[#191c1e]">历史行程</h1>
+          <form className="mt-4 flex flex-wrap items-center gap-3" action="/history">
+            <label
+              className="text-sm font-semibold text-[#434655]"
+              htmlFor="history-date"
+            >
+              查看日期
+            </label>
+            <input
+              className="rounded-2xl border border-white/70 bg-white/80 px-4 py-2 text-sm font-semibold text-[#191c1e] outline-none ring-primary/20 transition focus:ring-4"
+              defaultValue={dayRange.value}
+              id="history-date"
+              name="date"
+              type="date"
+            />
+            <button
+              className="rounded-2xl bg-[#2563eb] px-4 py-2 text-sm font-bold text-white"
+              type="submit"
+            >
+              查看
+            </button>
+          </form>
         </header>
 
         {trips.length === 0 ? (
           <GlassCard className="p-6">
             <p className="text-sm font-medium text-[#434655]">
-              智能体创建的行程会显示在这里。
+              当天暂无历史行程。
             </p>
           </GlassCard>
         ) : (
@@ -87,7 +131,12 @@ export default async function HistoryPage() {
                           {trip.finalStopName ?? "目的地待定"}
                         </p>
                       </div>
-                      <span className="shrink-0 rounded-full bg-[#dae2fd] px-3 py-1 text-xs font-bold text-[#3f465c]">
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                          statusClasses[trip.status] ??
+                          "bg-[#f2f4f6] text-[#434655]"
+                        }`}
+                      >
                         {formatStatus(trip.status)}
                       </span>
                     </div>

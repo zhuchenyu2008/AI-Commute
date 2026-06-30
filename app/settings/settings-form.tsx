@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FormEvent, useState } from "react";
+import React, { FormEvent, KeyboardEvent, useState } from "react";
 import { ChevronDown, Loader2, Mail, Send } from "lucide-react";
 
 type SettingsValues = {
@@ -31,24 +31,84 @@ type SelectFieldProps = {
 };
 
 function SelectField({ defaultValue, id, name, options }: SelectFieldProps) {
+  const initialOption = options.find(([value]) => value === defaultValue) ?? options[0];
+  const [selected, setSelected] = useState(initialOption);
+  const [open, setOpen] = useState(false);
+
+  function selectOption(option: readonly [string, string]) {
+    setSelected(option);
+    setOpen(false);
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setOpen((value) => !value);
+    }
+  }
+
   return (
-    <div className="relative">
-      <select
-        className="w-full appearance-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 pr-11 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
-        defaultValue={defaultValue}
+    <div
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <input name={name} type="hidden" value={selected[0]} />
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-left text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
         id={id}
-        name={name}
+        onClick={() => setOpen((value) => !value)}
+        onKeyDown={onKeyDown}
+        type="button"
       >
-        {options.map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        aria-hidden="true"
-        className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-[#434655]"
-      />
+        <span>{selected[1]}</span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`size-4 shrink-0 text-[#434655] transition ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      {open ? (
+        <div
+          aria-labelledby={id}
+          className="absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-2xl border border-white/80 bg-white shadow-xl shadow-slate-200/80"
+          role="listbox"
+        >
+          {options.map((option) => {
+            const [value, label] = option;
+            const active = value === selected[0];
+
+            return (
+              <button
+                aria-selected={active}
+                className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold transition ${
+                  active
+                    ? "bg-[#dae2fd] text-[#1d3d7c]"
+                    : "text-[#191c1e] hover:bg-[#f2f4f6]"
+                }`}
+                key={value}
+                onClick={() => selectOption(option)}
+                role="option"
+                type="button"
+              >
+                {label}
+                {active ? <span className="text-xs">已选</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -59,6 +119,32 @@ type PlaceCandidate = {
   address: string;
   lngLat: string;
 };
+
+type NotificationResultPayload = {
+  result?: {
+    status?: string;
+    error?: string;
+  };
+  error?: string;
+};
+
+function formatTestNotificationMessage(
+  channel: "telegram" | "email",
+  payload: NotificationResultPayload,
+  ok: boolean
+) {
+  const success =
+    channel === "telegram" ? "Telegram 测试已发送" : "邮件测试已发送";
+  const failurePrefix =
+    channel === "telegram" ? "Telegram 测试未发送" : "邮件测试未发送";
+  const detail = payload.error ?? payload.result?.error;
+
+  if (ok) {
+    return success;
+  }
+
+  return detail ? `${failurePrefix}：${detail}` : failurePrefix;
+}
 
 export function SettingsForm({ values }: { values: SettingsValues }) {
   const [status, setStatus] = useState("");
@@ -140,16 +226,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
       });
       const payload = await response.json().catch(() => ({}));
       const ok = response.ok && payload.result?.status === "sent";
-      const message =
-        typeof payload.error === "string"
-          ? payload.error
-          : channel === "telegram"
-            ? ok
-              ? "Telegram 测试已发送"
-              : "Telegram 测试未发送"
-            : ok
-              ? "邮件测试已发送"
-              : "邮件测试未发送";
+      const message = formatTestNotificationMessage(channel, payload, ok);
 
       if (channel === "telegram") {
         setTelegramTestStatus(message);
@@ -187,18 +264,20 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
           />
         </label>
 
-        <label
-          className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center"
-          htmlFor="timezone"
-        >
-          <span className="text-sm font-medium text-on-surface-variant">时区</span>
+        <section className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center">
+          <label
+            className="text-sm font-medium text-on-surface-variant"
+            htmlFor="timezone"
+          >
+            时区
+          </label>
           <SelectField
             defaultValue={values.timezone}
             id="timezone"
             name="timezone"
             options={timezoneOptions}
           />
-        </label>
+        </section>
 
         <section className="grid gap-3 py-4 md:grid-cols-[160px_1fr] md:items-start">
           <span className="text-sm font-medium text-on-surface-variant">默认出发点</span>
@@ -254,18 +333,20 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
           </div>
         </section>
 
-        <label
-          className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center"
-          htmlFor="routePreference"
-        >
-          <span className="text-sm font-medium text-on-surface-variant">通勤方式倾向</span>
+        <section className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center">
+          <label
+            className="text-sm font-medium text-on-surface-variant"
+            htmlFor="routePreference"
+          >
+            通勤方式倾向
+          </label>
           <SelectField
             defaultValue={values.routePreference}
             id="routePreference"
             name="routePreference"
             options={routePreferenceOptions}
           />
-        </label>
+        </section>
 
         <section className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center">
           <span className="text-sm font-medium text-on-surface-variant">Telegram Chat ID</span>

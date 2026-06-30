@@ -15,6 +15,7 @@ import {
 } from "@/components/agent/agent-event-list";
 import { BottomNav } from "@/components/bottom-nav";
 import { CommuteInput, getAgentStartResult } from "@/components/home/commute-input";
+import { CurrentLocationLabel } from "@/components/home/current-location-label";
 import { BufferList } from "@/components/trips/buffer-list";
 import { RouteTimeline } from "@/components/trips/route-timeline";
 import { SettingsForm } from "@app/settings/settings-form";
@@ -568,11 +569,60 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain("默认出发点");
     expect(html).toContain("北京时间（Asia/Shanghai）");
     expect(html).toContain("通勤方式倾向");
-    expect(html).toContain("公交地铁优先");
-    expect(html).toContain("appearance-none");
+    expect(html).toContain('name="timezone"');
+    expect(html).toContain('name="routePreference"');
+    expect(html).toContain('type="hidden"');
+    expect(html).not.toContain("<select");
+    expect(html).not.toContain("appearance-none");
     expect(html).not.toContain("出发点坐标");
     expect(html).toContain('name="originLngLat"');
     expect(html).toContain('type="hidden"');
+  });
+
+  it("opens the custom route preference selector options", () => {
+    render(
+      <SettingsForm
+        values={{
+          defaultCity: "宁波",
+          timezone: "Asia/Shanghai",
+          originName: "",
+          originLngLat: "",
+          routePreference: "balanced",
+          telegramChatId: "",
+          emailRecipient: "",
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "通勤方式倾向" }));
+
+    expect(screen.getByRole("option", { name: /公交地铁优先/ })).toBeTruthy();
+  });
+
+  it("keeps the current location label textual instead of coordinates", async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      success({
+        coords: {
+          latitude: 29.865249,
+          longitude: 121.523031,
+          accuracy: 10,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: Date.now(),
+      } as GeolocationPosition);
+    });
+    vi.stubGlobal("navigator", {
+      geolocation: { getCurrentPosition },
+    });
+
+    render(<CurrentLocationLabel fallbackCity="宁波外事学校" />);
+
+    expect(await screen.findByText("宁波外事学校")).toBeTruthy();
+    expect(screen.queryByText(/29\.8652/)).toBeNull();
+    expect(getCurrentPosition).not.toHaveBeenCalled();
   });
 
   it("sends Telegram and email test notifications from settings", async () => {
@@ -638,6 +688,37 @@ describe("sample-aligned UI components", () => {
       );
     });
     await screen.findByText("邮件测试已发送");
+  });
+
+  it("shows detailed test notification failures in settings", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        result: {
+          status: "skipped",
+          recipient: "telegram-chat",
+          error: "缺少 TELEGRAM_BOT_TOKEN",
+        },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <SettingsForm
+        values={{
+          defaultCity: "宁波",
+          timezone: "Asia/Shanghai",
+          originName: "",
+          originLngLat: "",
+          routePreference: "balanced",
+          telegramChatId: "telegram-chat",
+          emailRecipient: "",
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "发送测试消息" }));
+
+    await screen.findByText("Telegram 测试未发送：缺少 TELEGRAM_BOT_TOKEN");
   });
 
   it("searches places with the edited default city and submits the selected origin", async () => {

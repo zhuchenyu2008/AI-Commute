@@ -54,9 +54,13 @@ export function BufferList({ buffers }: { buffers: BufferListItem[] }) {
                 <p className="mt-1 break-words text-sm leading-5 text-[#434655]">
                   {buffer.reason}
                 </p>
-                {weather ? (
+                {weather && buffer.minutes === 0 ? (
                   <p className="mt-2 text-xs font-semibold uppercase tracking-[0.05em] text-[#565e74]">
                     仅作天气参考
+                  </p>
+                ) : weather ? (
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.05em] text-[#565e74]">
+                    天气影响缓冲
                   </p>
                 ) : null}
               </div>

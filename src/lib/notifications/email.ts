@@ -27,8 +27,21 @@ export async function sendEmail({
     !hasValue(pass) ||
     !hasValue(recipient)
   ) {
-    return { status: "skipped", recipient };
+    const missing = [
+      !hasValue(host) ? "SMTP_HOST" : null,
+      !hasValue(user) ? "SMTP_USER" : null,
+      !hasValue(pass) ? "SMTP_PASS" : null,
+      !hasValue(recipient) ? "邮件接收人" : null,
+    ].filter(Boolean);
+
+    return {
+      status: "skipped",
+      recipient,
+      error: `缺少 ${missing.join("、")}`,
+    };
   }
+
+  const toAddress = recipient.trim();
 
   try {
     const transporter = nodemailer.createTransport({
@@ -40,7 +53,7 @@ export async function sendEmail({
 
     await transporter.sendMail({
       from,
-      to: recipient,
+      to: toAddress,
       subject,
       text,
     });

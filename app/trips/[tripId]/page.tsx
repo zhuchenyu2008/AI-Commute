@@ -17,6 +17,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getAgentConversationHref } from "@/lib/app-routes";
 import { prisma } from "@/lib/db";
 import {
+  formatReminderStatus,
   getMonitoringStatusDisplay,
   getMonitoringSummary,
 } from "@/lib/trips/monitoring";
@@ -49,23 +50,6 @@ function formatDateTime(date?: Date | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function formatStatus(status?: string | null) {
-  const labels: Record<string, string> = {
-    cancelled: "已取消",
-    completed: "已完成",
-    failed: "失败",
-    monitoring: "监控中",
-    pending: "待处理",
-    running: "运行中",
-    scheduled: "已计划",
-    sent: "已发送",
-    skipped: "已跳过",
-    timed_out: "已超时",
-  };
-
-  return status ? labels[status] ?? status : "待定";
 }
 
 function formatReminderKind(kind: string) {
@@ -200,6 +184,7 @@ export default async function TripDetailPage({ params }: TripPageProps) {
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
   const monitoringStatusDisplay = getMonitoringStatusDisplay({
     tripStatus: trip.status,
+    targetArriveAt: trip.targetArriveAt,
     latestRecalculation,
   });
   const agentSessionId = trip.agentSessions[0]?.id ?? trip.agentSessionId;
@@ -304,7 +289,7 @@ export default async function TripDetailPage({ params }: TripPageProps) {
             <h2 className="text-lg font-bold text-[#191c1e]">缓冲时间</h2>
           </div>
           <p className="mt-1 text-sm text-[#434655]">
-            天气仅作为参考信息，不直接计入路程时间。
+            天气会作为路线选择和缓冲时间的参考；若智能体明确预留天气余量，会计入总时间。
           </p>
           <div className="mt-4">
             <BufferList buffers={buffers} />
@@ -337,7 +322,11 @@ export default async function TripDetailPage({ params }: TripPageProps) {
                       </p>
                     </div>
                     <span className="rounded-full bg-[#f2f4f6] px-3 py-1 text-xs font-bold text-[#434655]">
-                      {formatStatus(reminder.status)}
+                      {formatReminderStatus({
+                        status: reminder.status,
+                        kind: reminder.kind,
+                        scheduledFor: reminder.scheduledFor,
+                      })}
                     </span>
                   </div>
                 ))
@@ -375,7 +364,7 @@ export default async function TripDetailPage({ params }: TripPageProps) {
               </div>
               {latestRecalculation ? (
                 <div className="mt-3 space-y-1 text-xs font-semibold uppercase tracking-[0.05em] text-[#38485d]">
-                  <p>最近复算：{formatStatus(latestRecalculation.status)}</p>
+                  <p>最近复算：{latestRecalculation.status}</p>
                   {latestRecalculation.summary ? (
                     <p className="normal-case tracking-normal">
                       {latestRecalculation.summary}

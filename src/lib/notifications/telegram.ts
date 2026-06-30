@@ -21,8 +21,12 @@ export async function sendTelegram({
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const recipient = chatId ?? null;
 
-  if (!hasValue(token) || !hasValue(recipient)) {
-    return { status: "skipped", recipient };
+  if (!hasValue(token)) {
+    return { status: "skipped", recipient, error: "缺少 TELEGRAM_BOT_TOKEN" };
+  }
+
+  if (!hasValue(recipient)) {
+    return { status: "skipped", recipient, error: "缺少 Telegram Chat ID" };
   }
 
   try {
@@ -40,10 +44,15 @@ export async function sendTelegram({
     );
 
     if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        description?: string;
+      } | null;
       return {
         status: "failed",
         recipient,
-        error: `Telegram request failed with ${response.status}`,
+        error: payload?.description
+          ? `Telegram ${response.status}: ${payload.description}`
+          : `Telegram request failed with ${response.status}`,
       };
     }
 

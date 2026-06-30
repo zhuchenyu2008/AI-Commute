@@ -453,6 +453,35 @@ describe("agent planning sessions", () => {
     );
   });
 
+  it("instructs the agent to adapt to bad weather and record explicit habits", async () => {
+    const user = await createUserWithSettings("agent-weather-memory-prompt");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "明天大雨，我习惯雨天少走路。",
+    });
+    let systemText = "";
+    const chatClient: AgentChatClient = {
+      async complete({ messages }) {
+        systemText = messages
+          .filter((message) => message.role === "system")
+          .map((message) => message.content)
+          .join("\n");
+        throw new Error("stop after prompt capture");
+      },
+    };
+
+    const result = await runPlanningSession(session.id, {
+      amapClient,
+      chatClient,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(systemText).toContain("恶劣天气");
+    expect(systemText).toContain("长距离步行");
+    expect(systemText).toContain("create_memory_candidate");
+    expect(systemText).toContain("我习惯");
+  });
+
   it("lets the AI choose AMap tools, route mode, and buffer details", async () => {
     const user = await createUserWithSettings("agent-ai-led");
     const session = await startPlanningSession({

@@ -18,6 +18,8 @@ export type MonitoringSummaryInput = FormatMonitoredDurationInput & {
 
 export type MonitoringStatusDisplayInput = {
   tripStatus?: string | null;
+  targetArriveAt?: Date | null;
+  now?: Date;
   latestRecalculation?: {
     status?: string | null;
     summary?: string | null;
@@ -40,6 +42,17 @@ const MONITORING_STATUS_DESCRIPTIONS: Record<string, string> = {
   monitoring: "系统会在预定提醒和智能体复算时检查路线。",
   planning: "行程仍在规划中，完成后会进入监控。",
 };
+
+type ReminderStatusInput = {
+  status?: string | null;
+  kind: string;
+  scheduledFor: Date;
+  now?: Date;
+};
+
+function isExpiredScheduledTime(date: Date, now = new Date()) {
+  return date.getTime() < now.getTime();
+}
 
 export function formatMonitoredDuration({
   createdAt,
@@ -74,9 +87,25 @@ export function getMonitoringSummary({
 
 export function getMonitoringStatusDisplay({
   tripStatus,
+  targetArriveAt,
+  now = new Date(),
   latestRecalculation,
 }: MonitoringStatusDisplayInput) {
   const normalizedStatus = tripStatus?.trim() || "monitoring";
+
+  if (
+    (normalizedStatus === "monitoring" || normalizedStatus === "scheduled") &&
+    targetArriveAt &&
+    isExpiredScheduledTime(targetArriveAt, now)
+  ) {
+    return {
+      title: "已过期",
+      description: "目标到达时间已过，系统不再把它当作等待中的通勤。",
+      recalculationStatus: latestRecalculation?.status ?? null,
+      recalculationSummary: latestRecalculation?.summary ?? null,
+      trigger: latestRecalculation?.trigger ?? null,
+    };
+  }
 
   return {
     title: MONITORING_STATUS_LABELS[normalizedStatus] ?? normalizedStatus,
@@ -87,6 +116,39 @@ export function getMonitoringStatusDisplay({
     recalculationSummary: latestRecalculation?.summary ?? null,
     trigger: latestRecalculation?.trigger ?? null,
   };
+}
+
+export function formatReminderStatus({
+  status,
+  kind,
+  scheduledFor,
+  now = new Date(),
+}: ReminderStatusInput) {
+  if (!status) {
+    return "待定";
+  }
+
+  if (status === "scheduled") {
+    if (isExpiredScheduledTime(scheduledFor, now)) {
+      return "已过期";
+    }
+
+    return kind === "recheck" ? "等待复查" : "等待提醒";
+  }
+
+  const labels: Record<string, string> = {
+    cancelled: "已取消",
+    completed: "已完成",
+    failed: "失败",
+    monitoring: "监控中",
+    pending: "待处理",
+    running: "运行中",
+    sent: "已发送",
+    skipped: "已跳过",
+    timed_out: "已超时",
+  };
+
+  return labels[status] ?? status;
 }
 
 export async function cancelTripMonitoring(input: {

@@ -229,7 +229,7 @@ describe("route update helpers", () => {
       }))
     ).toEqual([
       { category: "parking", minutes: 4 },
-      { category: "weather_context", minutes: 0 },
+      { category: "weather_context", minutes: 8 },
     ]);
     for (const leg of updated.legs) {
       expect(leg.routeCandidates).toHaveLength(1);

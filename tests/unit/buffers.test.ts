@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { normalizeBufferComponents } from "@/lib/trips/buffers";
 
 describe("normalizeBufferComponents", () => {
-  it("keeps weather context as a zero-minute reference buffer", () => {
+  it("keeps agent-provided weather buffer minutes", () => {
     const components = normalizeBufferComponents([
       {
         category: "weather_context",
         label: "附近有大雨",
         minutes: 12.7,
-        reason: "雨势只影响监控参考，不增加固定缓冲。",
+        reason: "大雨会拖慢步行和等车。",
         source: "weather_context",
       },
       {
@@ -25,8 +25,8 @@ describe("normalizeBufferComponents", () => {
         order: 0,
         category: "weather_context",
         label: "附近有大雨",
-        minutes: 0,
-        reason: "雨势只影响监控参考，不增加固定缓冲。",
+        minutes: 13,
+        reason: "大雨会拖慢步行和等车。",
         source: "weather_context",
       },
       {

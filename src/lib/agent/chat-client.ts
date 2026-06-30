@@ -243,7 +243,7 @@ export function createFallbackChatClient(): AgentChatClient {
                     mode: "transit",
                     routeTitle,
                     routeRationale:
-                      "mock agent 根据高德路线工具结果选择公交/地铁作为本地演示方案。",
+                      "mock agent 根据高德路线和天气证据选择公交/地铁作为本地演示方案。",
                     segmentTitle: "公交/地铁到龙湖天街",
                     segmentDetail: "mock agent 通过工具调用生成，非固定 planner 排序。",
                     segmentSource: "amap",
@@ -267,7 +267,7 @@ export function createFallbackChatClient(): AgentChatClient {
                         category: "weather_context",
                         label: "天气参考",
                         minutes: 0,
-                        reason: "天气只作为 mock agent 的参考信息。",
+                        reason: "当前 mock 天气温和，暂不额外增加天气缓冲。",
                         source: "weather_context",
                       },
                     ],

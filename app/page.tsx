@@ -29,6 +29,14 @@ const toneClasses: Record<HomeTripStatusTone, string> = {
   warning: "bg-[#F59E0B]/15 text-[#92400e]",
 };
 
+const historyDotClasses: Record<string, string> = {
+  cancelled: "bg-[#8a92a6]",
+  completed: "bg-[#0f9f6e]",
+  failed: "bg-[#b42318]",
+  monitoring: "bg-[#10B981]",
+  scheduled: "bg-[#2563eb]",
+};
+
 function formatShortDate(date: Date) {
   return new Intl.DateTimeFormat("zh-CN", {
     month: "numeric",
@@ -46,7 +54,8 @@ export default async function HomePage() {
     redirect("/login");
   }
 
-  const [settings, latestTrip, recentTrips, latestMemory] = await Promise.all([
+  const [settings, latestTrip, recentTrips, latestMemory, pendingMemoryCount] =
+    await Promise.all([
     prisma.userSettings.findUnique({
       where: { userId: user.id },
     }),
@@ -65,12 +74,16 @@ export default async function HomePage() {
       orderBy: { updatedAt: "desc" },
       take: 3,
     }),
-    prisma.memory.findFirst({
-      where: { userId: user.id },
-      orderBy: { updatedAt: "desc" },
-    }),
-  ]);
+      prisma.memory.findFirst({
+        where: { userId: user.id },
+        orderBy: { updatedAt: "desc" },
+      }),
+      prisma.memoryCandidate.count({
+        where: { userId: user.id, status: "pending" },
+      }),
+    ]);
   const defaultCity = settings?.defaultCity ?? "宁波";
+  const currentLocationName = settings?.originName ?? defaultCity;
   const latestTripStatus = formatHomeTripStatus(latestTrip);
   const latestTripHref = latestTrip ? `/trips/${latestTrip.id}` : "/history";
   const firstLeg = latestTrip?.legs[0];
@@ -87,7 +100,7 @@ export default async function HomePage() {
             <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.05em] text-[#434655]">
               <MapPin aria-hidden="true" className="size-4 text-[#2563eb]" />
               当前位置
-              <CurrentLocationLabel fallbackCity={defaultCity} />
+              <CurrentLocationLabel fallbackCity={currentLocationName} />
             </p>
             <h1 className="text-3xl font-bold leading-tight text-[#191c1e] md:text-4xl">
               规划一次通勤
@@ -160,13 +173,20 @@ export default async function HomePage() {
                     </p>
                   ) : (
                     recentTrips.map((trip) => (
-                      <div key={trip.id}>
-                        <p className="truncate text-xs font-bold text-[#191c1e]">
-                          {trip.title}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs font-medium text-[#434655]">
-                          {formatHistoryTripSummary(trip)}
-                        </p>
+                      <div className="flex gap-2" key={trip.id}>
+                        <span
+                          className={`mt-1 size-2.5 shrink-0 rounded-full ${
+                            historyDotClasses[trip.status] ?? "bg-[#c3c6d7]"
+                          }`}
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-bold text-[#191c1e]">
+                            {trip.title}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs font-medium text-[#434655]">
+                            {formatHistoryTripSummary(trip)}
+                          </p>
+                        </div>
                       </div>
                     ))
                   )}
@@ -182,15 +202,22 @@ export default async function HomePage() {
                   </p>
                   <ArrowRight aria-hidden="true" className="size-4 text-[#434655]" />
                 </div>
-                <p className="mt-3 text-xs font-medium leading-5 text-[#434655]">
+                <p className="mt-3 rounded-2xl bg-white/55 px-3 py-3 text-xs font-bold leading-5 text-[#191c1e]">
                   {formatLatestMemorySummary(latestMemory)}
                 </p>
-                {latestMemory ? (
-                  <p className="mt-2 flex items-center gap-1 text-xs font-medium text-[#737686]">
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-[#737686]">
+                  {latestMemory ? (
+                    <span className="flex items-center gap-1">
                     <Clock3 aria-hidden="true" className="size-3.5" />
                     {formatShortDate(latestMemory.updatedAt)}
-                  </p>
-                ) : null}
+                    </span>
+                  ) : null}
+                  {pendingMemoryCount > 0 ? (
+                    <span className="rounded-full bg-[#f4f0ff] px-2 py-1 font-bold text-[#5140a8]">
+                      {pendingMemoryCount} 条待确认
+                    </span>
+                  ) : null}
+                </div>
               </GlassCard>
             </Link>
           </div>

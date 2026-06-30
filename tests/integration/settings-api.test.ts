@@ -368,6 +368,42 @@ describe("settings API", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
+  it("returns detailed skipped reasons for test notifications", async () => {
+    const { POST } = await import("@app/api/settings/test-notification/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `settings-test-skipped-${Date.now()}@example.com`,
+        name: "Skipped Notification User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+    sendTelegramMock.mockResolvedValue({
+      status: "skipped",
+      recipient: "telegram-chat",
+      error: "缺少 TELEGRAM_BOT_TOKEN",
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/settings/test-notification", {
+        method: "POST",
+        body: JSON.stringify({
+          channel: "telegram",
+          telegramChatId: "telegram-chat",
+        }),
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.result).toEqual({
+      status: "skipped",
+      recipient: "telegram-chat",
+      error: "缺少 TELEGRAM_BOT_TOKEN",
+    });
+  });
+
   it("sends email test notifications to the supplied recipient", async () => {
     const { POST } = await import("@app/api/settings/test-notification/route");
     const user = await prisma.user.create({

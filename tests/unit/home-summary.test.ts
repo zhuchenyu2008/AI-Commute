@@ -12,7 +12,7 @@ describe("home summary helpers", () => {
         status: "monitoring",
         finalStopName: "宁波外事学校",
         targetArriveAt: new Date("2026-06-29T09:00:00.000Z"),
-      })
+      }, new Date("2026-06-29T08:00:00.000Z"))
     ).toEqual({
       label: "监控中",
       tone: "success",
@@ -29,6 +29,23 @@ describe("home summary helpers", () => {
         finalStopName: "图书馆",
       })
     ).toEqual("已完成 · 图书馆");
+  });
+
+  it("marks stale monitoring trips as expired on the home card", () => {
+    expect(
+      formatHomeTripStatus(
+        {
+          status: "monitoring",
+          finalStopName: "东钱湖地铁站",
+          targetArriveAt: new Date("2026-06-30T00:30:00.000Z"),
+        },
+        new Date("2026-06-30T01:00:00.000Z")
+      )
+    ).toMatchObject({
+      label: "已过期",
+      tone: "warning",
+      title: "东钱湖地铁站",
+    });
   });
 
   it("formats the latest memory with fallback text", () => {
