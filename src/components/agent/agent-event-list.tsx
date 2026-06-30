@@ -11,111 +11,27 @@ import {
   Send,
   Wrench,
 } from "lucide-react";
-import { sanitizeAgentVisibleReply } from "@/lib/agent/plain-text";
+import {
+  buildAgentEvents,
+  formatAgentEventStatus,
+  type AgentMessageEventSource,
+  type AgentToolCallEventSource,
+} from "@/lib/agent/events";
 
 export { getAgentConversationHref } from "@/lib/app-routes";
-
-type AgentMessage = {
-  id: string;
-  role: string;
-  content: string;
-  createdAt: string;
-};
-
-type AgentToolCall = {
-  id: string;
-  name: string;
-  status: string;
-  durationMs?: number | null;
-  error?: string | null;
-  createdAt: string;
-};
+export { buildAgentEvents, formatAgentToolName } from "@/lib/agent/events";
 
 type AgentSessionPayload = {
   id: string;
   tripId?: string | null;
   status: string;
   prompt: string;
-  messages: AgentMessage[];
-  toolCalls: AgentToolCall[];
-};
-
-type AgentEvent = {
-  id: string;
-  kind: "message" | "tool";
-  title: string;
-  detail: string;
-  status: string;
-  createdAt: string;
+  messages: AgentMessageEventSource[];
+  toolCalls: AgentToolCallEventSource[];
 };
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "timed_out", "cancelled"]);
 const REDIRECT_DELAY_MS = 1200;
-
-export function formatAgentToolName(name: string) {
-  const labels: Record<string, string> = {
-    create_trip: "创建行程",
-    get_bicycling_route: "查询骑行路线",
-    get_transit_route: "查询公交/地铁路线",
-    get_walking_route: "查询步行路线",
-    get_weather_reference: "获取天气参考",
-    read_memories: "读取记忆",
-    read_settings: "读取设置",
-    search_poi: "搜索地点",
-  };
-
-  return labels[name] ?? "工具调用";
-}
-
-function formatStatus(status: string) {
-  const labels: Record<string, string> = {
-    assistant: "智能体",
-    cancelled: "已取消",
-    completed: "已完成",
-    failed: "失败",
-    loading: "加载中",
-    running: "运行中",
-    timed_out: "已超时",
-    tool: "工具",
-    user: "用户",
-  };
-
-  return labels[status] ?? status;
-}
-
-export function buildAgentEvents(session: {
-  messages: AgentMessage[];
-  toolCalls: AgentToolCall[];
-}): AgentEvent[] {
-  return [
-    ...session.messages.map((message) => ({
-      id: `message-${message.id}`,
-      kind: "message" as const,
-      title: message.role === "assistant" ? "智能体更新" : "用户请求",
-      detail:
-        message.role === "assistant"
-          ? sanitizeAgentVisibleReply(message.content)
-          : message.content,
-      status: message.role,
-      createdAt: message.createdAt,
-    })),
-    ...session.toolCalls.map((tool) => ({
-      id: `tool-${tool.id}`,
-      kind: "tool" as const,
-      title: formatAgentToolName(tool.name),
-      detail:
-        tool.error ??
-        (tool.durationMs ? `${tool.durationMs} 毫秒` : "已记录工具调用"),
-      status: tool.status,
-      createdAt: tool.createdAt,
-    })),
-  ].sort((left, right) => {
-    const timeDelta =
-      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-
-    return timeDelta || left.id.localeCompare(right.id);
-  });
-}
 
 export function getAgentSessionViewState({
   autoRedirect,
@@ -326,7 +242,7 @@ export function AgentEventList({
           )}
           {viewState.status === "completed"
             ? "agent已完成规划"
-            : formatStatus(viewState.status)}
+            : formatAgentEventStatus(viewState.status)}
         </div>
       </div>
 
@@ -406,7 +322,7 @@ export function AgentEventList({
                       {event.title}
                     </p>
                     <span className="shrink-0 rounded-full bg-[#f2f4f6] px-2.5 py-1 text-xs font-bold text-[#434655]">
-                      {formatStatus(event.status)}
+                      {formatAgentEventStatus(event.status)}
                     </span>
                   </div>
                   <p className="mt-2 break-words text-sm leading-6 text-[#434655]">

@@ -7,12 +7,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import RootLayout from "@app/layout";
 import {
   AgentEventList,
-  buildAgentEvents,
-  formatAgentToolName,
   getAgentConversationHref,
   getAgentSendMessageResult,
   getAgentSessionViewState,
 } from "@/components/agent/agent-event-list";
+import { buildAgentEvents, formatAgentToolName } from "@/lib/agent/events";
 import { BottomNav } from "@/components/bottom-nav";
 import { HistoryDateFilter } from "@/components/history/history-date-filter";
 import { CommuteInput, getAgentStartResult } from "@/components/home/commute-input";

@@ -50,10 +50,21 @@ describe("telegram agent update handler", () => {
     const session = await createAgentSession(user.id, "completed", trip.id);
     const bot = createMockBot();
     const agentBridge = createMockAgentBridge();
-    agentBridge.startPlanning.mockResolvedValue({
-      sessionId: session.id,
-      tripId: trip.id,
-      summary: "Planning summary.",
+    agentBridge.startPlanning.mockImplementation(async (input) => {
+      await input.progress?.onSessionStarted(session.id);
+      await expect(
+        prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+      ).resolves.toMatchObject({
+        activeAgentSessionId: session.id,
+        activeTripId: null,
+        mode: "active",
+      });
+      await input.progress?.onProgressMessage("用户请求\narrive at office by 9");
+      return {
+        sessionId: session.id,
+        tripId: trip.id,
+        summary: "Planning summary.",
+      };
     });
 
     await handleTelegramUpdate({
@@ -62,10 +73,12 @@ describe("telegram agent update handler", () => {
       agentBridge,
     });
 
-    expect(agentBridge.startPlanning).toHaveBeenCalledWith({
-      userId: user.id,
-      prompt: "arrive at office by 9",
-    });
+    expect(agentBridge.startPlanning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: user.id,
+        prompt: "arrive at office by 9",
+      })
+    );
     await expect(
       prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
     ).resolves.toMatchObject({
@@ -75,15 +88,22 @@ describe("telegram agent update handler", () => {
     });
     expect(bot.sendMessage).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ chatId, text: expect.stringContaining("\u5df2\u5f00\u59cb") })
+      expect.objectContaining({
+        chatId,
+        text: expect.stringContaining("\u5df2\u5f00\u59cb"),
+      })
     );
     expect(bot.sendMessage).toHaveBeenNthCalledWith(2, {
       chatId,
-      text: "Planning summary.",
+      text: "用户请求\narrive at office by 9",
+    });
+    expect(bot.sendMessage).toHaveBeenLastCalledWith({
+      chatId,
+      text: expect.stringContaining("最终行程计划"),
     });
   });
 
-  it("keeps persisted /new planning state when the final summary message fails", async () => {
+  it("keeps persisted /new planning state when the final plan message fails", async () => {
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -159,10 +179,13 @@ describe("telegram agent update handler", () => {
     await createChatState(chatId, user.id, session.id, oldTrip.id, "active");
     const bot = createMockBot();
     const agentBridge = createMockAgentBridge();
-    agentBridge.continueSession.mockResolvedValue({
-      sessionId: session.id,
-      tripId: nextTrip.id,
-      summary: "Updated summary.",
+    agentBridge.continueSession.mockImplementation(async (input) => {
+      await input.progress?.onProgressMessage("智能体更新\n已收到补充信息");
+      return {
+        sessionId: session.id,
+        tripId: nextTrip.id,
+        summary: "Updated summary.",
+      };
     });
 
     await handleTelegramUpdate({
@@ -171,11 +194,13 @@ describe("telegram agent update handler", () => {
       agentBridge,
     });
 
-    expect(agentBridge.continueSession).toHaveBeenCalledWith({
-      userId: user.id,
-      sessionId: session.id,
-      message: "leave ten minutes earlier",
-    });
+    expect(agentBridge.continueSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: user.id,
+        sessionId: session.id,
+        message: "leave ten minutes earlier",
+      })
+    );
     await expect(
       prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
     ).resolves.toMatchObject({
@@ -185,15 +210,22 @@ describe("telegram agent update handler", () => {
     });
     expect(bot.sendMessage).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ chatId, text: expect.stringContaining("\u7ee7\u7eed") })
+      expect.objectContaining({
+        chatId,
+        text: expect.stringContaining("\u7ee7\u7eed"),
+      })
     );
     expect(bot.sendMessage).toHaveBeenNthCalledWith(2, {
       chatId,
-      text: "Updated summary.",
+      text: "智能体更新\n已收到补充信息",
+    });
+    expect(bot.sendMessage).toHaveBeenLastCalledWith({
+      chatId,
+      text: expect.stringContaining("最终行程计划"),
     });
   });
 
-  it("keeps persisted continuation state when the final summary message fails", async () => {
+  it("keeps persisted continuation state when the final plan message fails", async () => {
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -280,6 +312,76 @@ describe("telegram agent update handler", () => {
     expect(bot.sendMessage).not.toHaveBeenCalledWith({
       chatId,
       text: expect.stringContaining("\u7a0d\u540e"),
+    });
+  });
+
+  it("keeps planning when a realtime progress message fails to send", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const chatId = uniqueChatId("progress-fails");
+    const user = await createTelegramUser("progress-fails", chatId);
+    const trip = await createTrip(user.id, "Progress commute", "monitoring");
+    const session = await createAgentSession(user.id, "completed", trip.id);
+    const bot = createMockBot();
+    bot.sendMessage
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Telegram progress failed"))
+      .mockResolvedValue(undefined);
+    const agentBridge = createMockAgentBridge();
+    agentBridge.startPlanning.mockImplementation(async (input) => {
+      await input.progress?.onSessionStarted(session.id);
+      await input.progress?.onProgressMessage("工具调用：搜索地点\n状态：运行中");
+      return {
+        sessionId: session.id,
+        tripId: trip.id,
+        summary: "Planning summary.",
+      };
+    });
+
+    await expect(
+      handleTelegramUpdate({
+        update: messageUpdate(chatId, "/new arrive at office by 9"),
+        bot,
+        agentBridge,
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(
+      prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
+    ).resolves.toMatchObject({
+      activeAgentSessionId: session.id,
+      activeTripId: trip.id,
+      mode: "active",
+    });
+    expect(bot.sendMessage).toHaveBeenLastCalledWith({
+      chatId,
+      text: expect.stringContaining("最终行程计划"),
+    });
+    expect(consoleError).toHaveBeenCalled();
+  });
+
+  it("sends the assistant summary when planning does not create a trip", async () => {
+    const chatId = uniqueChatId("no-trip-summary");
+    const user = await createTelegramUser("no-trip-summary", chatId);
+    const session = await createAgentSession(user.id, "failed", null);
+    const bot = createMockBot();
+    const agentBridge = createMockAgentBridge();
+    agentBridge.startPlanning.mockResolvedValue({
+      sessionId: session.id,
+      tripId: null,
+      summary: "规划失败：请稍后重试。",
+    });
+
+    await handleTelegramUpdate({
+      update: messageUpdate(chatId, "/new arrive at office by 9"),
+      bot,
+      agentBridge,
+    });
+
+    expect(bot.sendMessage).toHaveBeenLastCalledWith({
+      chatId,
+      text: "规划失败：请稍后重试。",
     });
   });
 
@@ -562,10 +664,13 @@ describe("telegram agent update handler", () => {
     });
 
     expect(agentBridge.continueSession).not.toHaveBeenCalled();
-    expect(agentBridge.startPlanning).toHaveBeenCalledWith({
-      userId: newUser.id,
-      prompt: "plan for the new user",
-    });
+    expect(agentBridge.startPlanning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progress: expect.any(Object),
+        userId: newUser.id,
+        prompt: "plan for the new user",
+      })
+    );
     await expect(
       prisma.telegramChatState.findUniqueOrThrow({ where: { chatId } })
     ).resolves.toMatchObject({

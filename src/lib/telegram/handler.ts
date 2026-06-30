@@ -15,8 +15,10 @@ import {
 } from "./commands";
 import {
   formatBoundHelpMessage,
+  formatFinalTripPlanMessage,
   formatTripListMessage,
   formatUnboundMessage,
+  splitTelegramMessage,
 } from "./messages";
 import {
   findBoundTelegramUser,
@@ -54,6 +56,133 @@ async function sendBestEffort(
   } catch (error) {
     logTelegramSendFailure(context, error);
   }
+}
+
+async function sendChunkedBestEffort(
+  bot: TelegramBotClient,
+  input: Parameters<TelegramBotClient["sendMessage"]>[0],
+  context: string
+) {
+  for (const text of splitTelegramMessage(input.text)) {
+    await sendBestEffort(bot, { ...input, text }, context);
+  }
+}
+
+async function formatFinalTripPlanForTelegram(input: {
+  tripId: string;
+  userId: string;
+}) {
+  const trip = await prisma.trip.findFirst({
+    where: { id: input.tripId, userId: input.userId },
+    include: {
+      legs: {
+        orderBy: { order: "asc" },
+        include: {
+          selectedCandidate: true,
+          routeSegments: { orderBy: { order: "asc" } },
+          bufferComponents: { orderBy: { order: "asc" } },
+        },
+      },
+      reminderJobs: { orderBy: { scheduledFor: "asc" } },
+      recalculations: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  if (!trip) return null;
+
+  return formatFinalTripPlanMessage({
+    title: trip.title,
+    status: trip.status,
+    targetArriveAt: trip.targetArriveAt,
+    createdAt: trip.createdAt,
+    legs: trip.legs.map((leg) => ({
+      id: leg.id,
+      originName: leg.originName,
+      destinationName: leg.destinationName,
+      latestDepartAt: leg.latestDepartAt,
+      targetArriveAt: leg.targetArriveAt,
+      selectedCandidate: leg.selectedCandidate
+        ? {
+            title: leg.selectedCandidate.title,
+            routeMinutes: leg.selectedCandidate.routeMinutes,
+            bufferMinutes: leg.selectedCandidate.bufferMinutes,
+            totalMinutes: leg.selectedCandidate.totalMinutes,
+            rationale: leg.selectedCandidate.rationale,
+          }
+        : null,
+      routeSegments: leg.routeSegments.map((segment) => ({
+        title: segment.title,
+        detail: segment.detail,
+        minutes: segment.minutes,
+        mode: segment.mode,
+      })),
+      bufferComponents: leg.bufferComponents.map((buffer) => ({
+        label: buffer.label,
+        minutes: buffer.minutes,
+        reason: buffer.reason,
+        category: buffer.category,
+        source: buffer.source,
+      })),
+    })),
+    reminderJobs: trip.reminderJobs.map((reminder) => ({
+      kind: reminder.kind,
+      status: reminder.status,
+      scheduledFor: reminder.scheduledFor,
+    })),
+    latestRecalculation: trip.recalculations[0] ?? null,
+  });
+}
+
+function createTelegramProgress(input: {
+  bot: TelegramBotClient;
+  chatId: string;
+  userId: string;
+}) {
+  return {
+    async onSessionStarted(sessionId: string) {
+      await setTelegramActiveConversation({
+        chatId: input.chatId,
+        userId: input.userId,
+        agentSessionId: sessionId,
+        tripId: null,
+      });
+    },
+    async onProgressMessage(text: string) {
+      await sendChunkedBestEffort(
+        input.bot,
+        { chatId: input.chatId, text },
+        "agent progress"
+      );
+    },
+  };
+}
+
+async function sendPlanningResult(input: {
+  bot: TelegramBotClient;
+  chatId: string;
+  userId: string;
+  tripId?: string | null;
+  summary: string;
+  context: string;
+}) {
+  const finalPlan = input.tripId
+    ? await formatFinalTripPlanForTelegram({
+        tripId: input.tripId,
+        userId: input.userId,
+      })
+    : null;
+
+  await sendChunkedBestEffort(
+    input.bot,
+    {
+      chatId: input.chatId,
+      text: finalPlan ?? input.summary,
+    },
+    input.context
+  );
 }
 
 async function getBoundChatState(chatId: string, userId: string) {
@@ -149,6 +278,7 @@ async function startNewPlanning(input: {
   const result = await input.bridge.startPlanning({
     userId: input.userId,
     prompt: input.prompt,
+    progress: createTelegramProgress(input),
   });
 
   await setTelegramActiveConversation({
@@ -158,14 +288,14 @@ async function startNewPlanning(input: {
     tripId: result.tripId,
   });
 
-  await sendBestEffort(
-    input.bot,
-    {
-      chatId: input.chatId,
-      text: result.summary,
-    },
-    "planning summary"
-  );
+  await sendPlanningResult({
+    bot: input.bot,
+    chatId: input.chatId,
+    userId: input.userId,
+    tripId: result.tripId,
+    summary: result.summary,
+    context: "planning final plan",
+  });
 }
 
 async function continueActiveSession(input: {
@@ -188,6 +318,7 @@ async function continueActiveSession(input: {
       userId: input.userId,
       sessionId: input.sessionId,
       message: input.message,
+      progress: createTelegramProgress(input),
     });
   } catch (error) {
     if (
@@ -213,14 +344,14 @@ async function continueActiveSession(input: {
     tripId: result.tripId ?? input.fallbackTripId ?? null,
   });
 
-  await sendBestEffort(
-    input.bot,
-    {
-      chatId: input.chatId,
-      text: result.summary,
-    },
-    "continuation summary"
-  );
+  await sendPlanningResult({
+    bot: input.bot,
+    chatId: input.chatId,
+    userId: input.userId,
+    tripId: result.tripId ?? input.fallbackTripId ?? null,
+    summary: result.summary,
+    context: "continuation final plan",
+  });
 }
 
 async function handlePlainText(input: {
