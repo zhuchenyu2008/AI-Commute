@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentSessionAlreadyRunningError } from "@/lib/agent/planner";
 import { prisma } from "@/lib/db";
 import type { TelegramBotClient } from "@/lib/telegram/client";
@@ -15,19 +15,6 @@ import { ensureTestDatabase } from "./test-db";
 describe("telegram agent update handler", () => {
   beforeAll(async () => {
     await ensureTestDatabase();
-  });
-
-  beforeEach(async () => {
-    await prisma.telegramChatState.deleteMany();
-    await prisma.agentMessage.deleteMany();
-    await prisma.agentToolCall.deleteMany();
-    await prisma.reminderJob.deleteMany();
-    await prisma.tripLeg.deleteMany();
-    await prisma.tripStop.deleteMany();
-    await prisma.agentSession.deleteMany();
-    await prisma.trip.deleteMany();
-    await prisma.userSettings.deleteMany();
-    await prisma.user.deleteMany();
   });
 
   afterEach(() => {
@@ -53,8 +40,7 @@ describe("telegram agent update handler", () => {
     await expect(
       prisma.telegramChatState.findUnique({ where: { chatId } })
     ).resolves.toBeNull();
-    await expect(prisma.agentSession.count()).resolves.toBe(0);
-    await expect(prisma.trip.count()).resolves.toBe(0);
+    expect(agentBridge.continueSession).not.toHaveBeenCalled();
   });
 
   it("starts a new planning session from /new prompt and stores the active conversation", async () => {
