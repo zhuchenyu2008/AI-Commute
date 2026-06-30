@@ -39,6 +39,11 @@ const SENSITIVE_KEYS = new Set([
   "SMTP_PASSWORD"
 ]);
 
+const EXAMPLE_SEED_PLACEHOLDERS = {
+  SEED_USER_EMAIL: new Set(["user@example.com"]),
+  SEED_USER_PASSWORD: new Set(["password"])
+};
+
 export function parseArgs(argv) {
   return {
     configure: argv.includes("--configure"),
@@ -60,7 +65,7 @@ export function parseDotEnv(text) {
       return {
         type: "entry",
         key: match[1],
-        value: match[2]
+        value: decodeDotEnvValue(match[2])
       };
     })
   };
@@ -184,6 +189,9 @@ export async function prepareConfiguration({
 }) {
   let document = parseDotEnv(envText ?? exampleText);
   let values = envDocumentToObject(document);
+  if (envText === undefined) {
+    values = clearExampleSeedPlaceholders(values);
+  }
   const originalValues = { ...values };
   const generatedResult = applyGeneratedDefaults(values, generator);
   values = generatedResult.values;
@@ -248,6 +256,51 @@ export function buildServicePlan(values) {
 
 function isEmpty(value) {
   return value === undefined || value.trim() === "";
+}
+
+function clearExampleSeedPlaceholders(values) {
+  const nextValues = { ...values };
+
+  for (const [key, placeholders] of Object.entries(EXAMPLE_SEED_PLACEHOLDERS)) {
+    if (placeholders.has(nextValues[key])) {
+      nextValues[key] = "";
+    }
+  }
+
+  return nextValues;
+}
+
+function decodeDotEnvValue(value) {
+  if (value.length < 2) {
+    return value;
+  }
+
+  const quote = value[0];
+  if ((quote !== '"' && quote !== "'") || value.at(-1) !== quote) {
+    return value;
+  }
+
+  const inner = value.slice(1, -1);
+  if (quote === "'") {
+    return inner;
+  }
+
+  return inner.replace(/\\([nrt"\\])/g, (_match, escape) => {
+    switch (escape) {
+      case "n":
+        return "\n";
+      case "r":
+        return "\r";
+      case "t":
+        return "\t";
+      case '"':
+        return '"';
+      case "\\":
+        return "\\";
+      default:
+        return escape;
+    }
+  });
 }
 
 function findLastEnvEntry(lines, key) {

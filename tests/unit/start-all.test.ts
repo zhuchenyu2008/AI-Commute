@@ -144,6 +144,28 @@ describe("native one-click deployment config", () => {
     expect(envDocumentToObject(document).OPENAI_MODEL).toBe("final");
   });
 
+  it("unquotes dotenv values before exposing them to runtime env", async () => {
+    const { envDocumentToObject, parseDotEnv } = await loadStartAll();
+
+    const values = envDocumentToObject(
+      parseDotEnv(
+        [
+          'OPENAI_API_KEY="openai-key"',
+          "SMTP_PASS='smtp-password'",
+          'MULTILINE="line\\nnext"',
+          'TABBED="a\\tb"',
+          'ESCAPED="quote: \\" slash: \\\\"'
+        ].join("\n")
+      )
+    );
+
+    expect(values.OPENAI_API_KEY).toBe("openai-key");
+    expect(values.SMTP_PASS).toBe("smtp-password");
+    expect(values.MULTILINE).toBe("line\nnext");
+    expect(values.TABBED).toBe("a\tb");
+    expect(values.ESCAPED).toBe('quote: " slash: \\');
+  });
+
   it("generates seed credentials and scheduler secret when they are empty", async () => {
     const { applyGeneratedDefaults } = await loadStartAll();
     const generator = {
@@ -275,6 +297,29 @@ describe("native one-click deployment runtime planning", () => {
     expect(result.values.OPENAI_API_KEY).toBe("openai-key");
     expect(result.envText).toContain("SEED_USER_EMAIL=user-token-6@example.local");
     expect(result.generated.seedUserPassword).toBe("token-18");
+  });
+
+  it("generates seed credentials instead of reusing .env.example placeholders on first run", async () => {
+    const { prepareConfiguration } = await loadRuntimeStartAll();
+
+    const result = await prepareConfiguration({
+      envText: undefined,
+      exampleText: readFileSync(".env.example", "utf8"),
+      args: { configure: false, yes: true },
+      prompt: async () => {
+        throw new Error("prompt should not be called in --yes mode");
+      },
+      generator: { token: (bytes) => `token-${bytes}` }
+    });
+
+    expect(result.values.SEED_USER_EMAIL).toBe("user-token-6@example.local");
+    expect(result.values.SEED_USER_PASSWORD).toBe("token-18");
+    expect(result.generated.seedUserEmail).toBe("user-token-6@example.local");
+    expect(result.generated.seedUserPassword).toBe("token-18");
+    expect(result.envText).toContain(
+      "SEED_USER_EMAIL=user-token-6@example.local"
+    );
+    expect(result.envText).toContain("SEED_USER_PASSWORD=token-18");
   });
 
   it("does not prompt or invent required service keys in yes mode", async () => {
