@@ -25,7 +25,8 @@ services:
 
   telegram:
     build: .
-    command: sh -c "npm run telegram:poll"
+    command: sh -c "npx prisma migrate deploy && npm run telegram:poll"
+    restart: unless-stopped
     env_file:
       - .env
     environment:

@@ -108,13 +108,15 @@ Telegram 用法：
 
 ## Docker
 
-同时运行 web app 和 scheduler：
+同时运行 web app、scheduler 和 Telegram worker：
 
 ```bash
 docker compose up --build
 ```
 
-`web` 服务会执行 `npx prisma migrate deploy && npm run start`，并暴露 `3000:3000`。`scheduler` 服务会每 60 秒运行一次 `npm run scheduler:tick`。
+`web` 服务会执行 `npx prisma migrate deploy && npm run start`，并暴露 `3000:3000`。`scheduler` 服务会每 60 秒运行一次 `npm run scheduler:tick`。`telegram` 服务会先执行 `npx prisma migrate deploy`，再运行 `npm run telegram:poll`。
+
+Telegram worker 需要在 `.env` 中配置 `TELEGRAM_BOT_TOKEN`。未配置 token 时，worker 会提示缺少配置并退出，不会启动 polling。
 
 SQLite 数据会持久化到 `./data`，并在容器内挂载到 `/app/data`。`docker-compose.yml` 会读取 `.env`，同时将容器内的 `DATABASE_URL` 设置为 `file:/app/data/commute.db`。
 
