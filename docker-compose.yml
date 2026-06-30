@@ -22,3 +22,15 @@ services:
       - ./data:/app/data
     depends_on:
       - web
+
+  telegram:
+    build: .
+    command: sh -c "npm run telegram:poll"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: file:/app/data/commute.db
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - web

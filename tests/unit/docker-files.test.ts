@@ -22,4 +22,20 @@ describe("Docker configuration", () => {
     expect(readme).toContain("docker compose up --build");
     expect(readme).toContain("npm run scheduler:tick");
   });
+
+  it("defines a Telegram worker service and script", () => {
+    const compose = readFileSync("docker-compose.yml", "utf8");
+    const packageJson = readFileSync("package.json", "utf8");
+    const readme = readFileSync("README.md", "utf8");
+
+    expect(packageJson).toContain('"telegram:poll": "tsx scripts/telegram-poll.ts"');
+    expect(compose).toContain("telegram:");
+    expect(compose).toContain("npm run telegram:poll");
+    expect(compose).toContain("depends_on:");
+    expect(compose).toContain("- web");
+    expect(readme).toContain("TELEGRAM_BOT_TOKEN");
+    expect(readme).toContain("npm run telegram:poll");
+    expect(readme).toContain("/trips");
+    expect(readme).toContain("/cancel");
+  });
 });

@@ -40,6 +40,7 @@ npm run prisma:migrate
 npm run prisma:deploy
 npm run prisma:seed
 npm run scheduler:tick
+npm run telegram:poll
 ```
 
 ## 测试
@@ -85,6 +86,25 @@ while true; do npm run scheduler:tick; sleep 60; done
 ```
 
 应用也包含 scheduler tick API。配置 `SCHEDULER_TICK_SECRET` 后，请求需要通过 `Authorization: Bearer <secret>` 或 `x-scheduler-secret` 传入同一个 secret；未配置该变量时，本地调用不会强制校验。
+
+## Telegram 双向入口
+
+Telegram polling worker 需要在 `.env` 中配置 `TELEGRAM_BOT_TOKEN`。用户还需要先登录网站，在设置页保存自己的 Telegram Chat ID，worker 才能把 Telegram 对话和站内用户关联起来。
+
+本地启动 Telegram worker：
+
+```bash
+npm run telegram:poll
+```
+
+Telegram 用法：
+
+- `/new 明天九点到外事学校` 创建新行程。
+- `/new` 后发送下一条普通文本创建新行程。
+- 普通文本会继续当前 Agent 对话。
+- `/trips` 通过 inline buttons 切换当前 Telegram 对话绑定的行程。
+- `/cancel` 取消当前行程监控。
+- `/new` 不会取消旧行程提醒，只有 `/cancel` 会取消。
 
 ## Docker
 
