@@ -10,6 +10,7 @@ export type ProcessTelegramPollingBatchInput = {
   bot: TelegramBotClient;
   offset?: number;
   timeoutSeconds: number;
+  signal?: AbortSignal;
   handleUpdate(update: TelegramUpdate): Promise<void>;
   markProcessed(updateId: number): Promise<unknown>;
 };
@@ -20,6 +21,7 @@ export async function processTelegramPollingBatch(
   const updates = await input.bot.getUpdates({
     offset: input.offset,
     timeoutSeconds: input.timeoutSeconds,
+    signal: input.signal,
   });
 
   for (const update of updates) {
@@ -34,17 +36,35 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.resolve();
 
   return new Promise((resolve) => {
-    const timeout = setTimeout(resolve, ms);
+    let timeout: ReturnType<typeof setTimeout>;
+    let settled = false;
 
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true }
-    );
+    const handleAbort = () => {
+      finish();
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", handleAbort);
+    };
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    timeout = setTimeout(finish, ms);
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    if (signal?.aborted) finish();
   });
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
 }
 
 export async function runTelegramPolling(input: {
@@ -60,13 +80,19 @@ export async function runTelegramPolling(input: {
   while (!input.signal?.aborted) {
     const offset = await getNextTelegramOffset();
 
-    await processTelegramPollingBatch({
-      bot,
-      offset,
-      timeoutSeconds,
-      handleUpdate: (update) => handleTelegramUpdate({ update, bot }),
-      markProcessed: markTelegramUpdateProcessed,
-    });
+    try {
+      await processTelegramPollingBatch({
+        bot,
+        offset,
+        timeoutSeconds,
+        signal: input.signal,
+        handleUpdate: (update) => handleTelegramUpdate({ update, bot }),
+        markProcessed: markTelegramUpdateProcessed,
+      });
+    } catch (error) {
+      if (isAbortError(error)) return;
+      throw error;
+    }
 
     await sleep(idleDelayMs, input.signal);
   }

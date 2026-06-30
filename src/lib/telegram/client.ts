@@ -25,6 +25,7 @@ export type TelegramBotClient = {
   getUpdates(input: {
     offset?: number | null;
     timeoutSeconds?: number;
+    signal?: AbortSignal;
   }): Promise<TelegramUpdate[]>;
   sendMessage(input: TelegramSendMessageInput): Promise<void>;
   answerCallbackQuery(input: {
@@ -37,11 +38,16 @@ export type TelegramBotClient = {
 export function createTelegramBotClient(input: { token: string }): TelegramBotClient {
   const baseUrl = `https://api.telegram.org/bot${input.token}`;
 
-  async function request<T>(method: string, body: Record<string, unknown>) {
+  async function request<T>(
+    method: string,
+    body: Record<string, unknown>,
+    signal?: AbortSignal
+  ) {
     const response = await fetch(`${baseUrl}/${method}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      signal,
     });
     const payload = (await response.json().catch(() => null)) as
       | TelegramApiResponse<T>
@@ -59,12 +65,16 @@ export function createTelegramBotClient(input: { token: string }): TelegramBotCl
   }
 
   return {
-    getUpdates({ offset, timeoutSeconds = 30 }) {
-      return request<TelegramUpdate[]>("getUpdates", {
-        offset: offset ?? undefined,
-        timeout: timeoutSeconds,
-        allowed_updates: ["message", "callback_query"],
-      });
+    getUpdates({ offset, timeoutSeconds = 30, signal }) {
+      return request<TelegramUpdate[]>(
+        "getUpdates",
+        {
+          offset: offset ?? undefined,
+          timeout: timeoutSeconds,
+          allowed_updates: ["message", "callback_query"],
+        },
+        signal
+      );
     },
     async sendMessage({ chatId, text, replyMarkup }) {
       await request("sendMessage", {

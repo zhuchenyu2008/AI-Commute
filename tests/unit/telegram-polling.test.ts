@@ -1,8 +1,35 @@
-import { describe, expect, it, vi } from "vitest";
-import { processTelegramPollingBatch } from "@/lib/telegram/polling";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  processTelegramPollingBatch,
+  runTelegramPolling,
+} from "@/lib/telegram/polling";
 import type { TelegramBotClient } from "@/lib/telegram/client";
 
+const telegramMocks = vi.hoisted(() => ({
+  createTelegramBotClient: vi.fn(),
+  getNextTelegramOffset: vi.fn(),
+  handleTelegramUpdate: vi.fn(),
+  markTelegramUpdateProcessed: vi.fn(),
+}));
+
+vi.mock("@/lib/telegram/client", () => ({
+  createTelegramBotClient: telegramMocks.createTelegramBotClient,
+}));
+
+vi.mock("@/lib/telegram/handler", () => ({
+  handleTelegramUpdate: telegramMocks.handleTelegramUpdate,
+}));
+
+vi.mock("@/lib/telegram/state", () => ({
+  getNextTelegramOffset: telegramMocks.getNextTelegramOffset,
+  markTelegramUpdateProcessed: telegramMocks.markTelegramUpdateProcessed,
+}));
+
 describe("telegram polling", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("fetches updates from the current offset and marks each processed update", async () => {
     const bot: TelegramBotClient = {
       getUpdates: vi.fn().mockResolvedValue([
@@ -34,6 +61,30 @@ describe("telegram polling", () => {
     expect(handler).toHaveBeenCalledTimes(2);
     expect(markProcessed).toHaveBeenCalledWith(10);
     expect(markProcessed).toHaveBeenCalledWith(11);
+  });
+
+  it("passes the abort signal to getUpdates", async () => {
+    const signal = new AbortController().signal;
+    const bot: TelegramBotClient = {
+      getUpdates: vi.fn().mockResolvedValue([]),
+      sendMessage: vi.fn(),
+      answerCallbackQuery: vi.fn(),
+    };
+
+    await processTelegramPollingBatch({
+      bot,
+      offset: 30,
+      timeoutSeconds: 1,
+      signal,
+      handleUpdate: vi.fn(),
+      markProcessed: vi.fn(),
+    });
+
+    expect(bot.getUpdates).toHaveBeenCalledWith({
+      offset: 30,
+      timeoutSeconds: 1,
+      signal,
+    });
   });
 
   it("does not mark an update processed when its handler fails", async () => {
@@ -97,5 +148,54 @@ describe("telegram polling", () => {
     expect(markProcessed).toHaveBeenCalledTimes(1);
     expect(markProcessed).toHaveBeenCalledWith(20);
     expect(markProcessed).not.toHaveBeenCalledWith(21);
+  });
+
+  it("resolves when an in-flight long poll is aborted", async () => {
+    const abortError = Object.assign(new Error("aborted"), {
+      name: "AbortError",
+    });
+    const bot: TelegramBotClient = {
+      getUpdates: vi.fn().mockRejectedValue(abortError),
+      sendMessage: vi.fn(),
+      answerCallbackQuery: vi.fn(),
+    };
+    const controller = new AbortController();
+
+    telegramMocks.createTelegramBotClient.mockReturnValue(bot);
+    telegramMocks.getNextTelegramOffset.mockResolvedValue(40);
+
+    await expect(
+      runTelegramPolling({
+        token: "token",
+        timeoutSeconds: 1,
+        idleDelayMs: 0,
+        signal: controller.signal,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(bot.getUpdates).toHaveBeenCalledWith({
+      offset: 40,
+      timeoutSeconds: 1,
+      signal: controller.signal,
+    });
+  });
+
+  it("rejects when long polling fails for a non-abort error", async () => {
+    const bot: TelegramBotClient = {
+      getUpdates: vi.fn().mockRejectedValue(new Error("network failed")),
+      sendMessage: vi.fn(),
+      answerCallbackQuery: vi.fn(),
+    };
+
+    telegramMocks.createTelegramBotClient.mockReturnValue(bot);
+    telegramMocks.getNextTelegramOffset.mockResolvedValue(50);
+
+    await expect(
+      runTelegramPolling({
+        token: "token",
+        timeoutSeconds: 1,
+        idleDelayMs: 0,
+      })
+    ).rejects.toThrow("network failed");
   });
 });

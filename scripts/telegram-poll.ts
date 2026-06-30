@@ -16,11 +16,18 @@ if (!token) {
   process.exit(0);
 }
 
+const controller = new AbortController();
+const abortPolling = () => controller.abort();
+
+process.once("SIGINT", abortPolling);
+process.once("SIGTERM", abortPolling);
+
 runTelegramPolling({
   token,
   timeoutSeconds: parseTimeoutSeconds(
     process.env.TELEGRAM_POLL_TIMEOUT_SECONDS
   ),
+  signal: controller.signal,
 }).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`Telegram 轮询 worker 失败：${message}`);

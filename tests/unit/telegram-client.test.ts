@@ -39,6 +39,21 @@ describe("Telegram Bot API client", () => {
     );
   });
 
+  it("passes an abort signal to getUpdates fetch requests", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, result: [] }), { status: 200 })
+    );
+    const client = createTelegramBotClient({ token: "token" });
+    const signal = new AbortController().signal;
+
+    await client.getUpdates({ offset: 10, timeoutSeconds: 20, signal });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottoken/getUpdates",
+      expect.objectContaining({ signal })
+    );
+  });
+
   it("sends messages with inline keyboard markup", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ ok: true, result: { message_id: 9 } }), {
