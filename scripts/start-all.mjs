@@ -402,6 +402,10 @@ function startSchedulerLoop(service, options) {
         state
       });
     } catch (error) {
+      if (stopped) {
+        return;
+      }
+
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[scheduler] ${message}`);
     }
