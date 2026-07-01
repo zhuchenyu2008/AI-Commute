@@ -187,6 +187,10 @@ export function buildRouteChangeEmail(
 ): BuiltEmailTemplate {
   const changeText = `受路况影响，出发时间变化约 ${Math.round(input.changeMinutes)} 分钟`;
   const previousDepartAt = formatBeijingTime(input.previousLatestDepartAt);
+  const plainTextIntro = [
+    changeText,
+    `原最晚出发时间：${previousDepartAt}`,
+  ].join("\n");
 
   const html = baseContainer(`
     <div style="padding:28px 28px 32px;">
@@ -202,7 +206,12 @@ export function buildRouteChangeEmail(
 
   return {
     subject: `通勤时间已变化：${input.tripTitle}`,
-    text: buildPlainText("Lumina Velocity", "出发时间已更新", input, changeText),
+    text: buildPlainText(
+      "Lumina Velocity",
+      "出发时间已更新",
+      input,
+      plainTextIntro
+    ),
     html,
   };
 }

@@ -551,6 +551,8 @@ describe("scheduler reminder processing", () => {
     expect(routeChangeEmail.html).toContain("17:55");
     expect(routeChangeEmail.text).toContain("Updated transit route");
     expect(routeChangeEmail.text).toContain("40 分钟");
+    expect(routeChangeEmail.text).toContain("原最晚出发时间");
+    expect(routeChangeEmail.text).toContain("17:00");
     expect(routeChangeEmail.html).toContain("Updated transit route");
     expect(routeChangeEmail.html).toContain("40 分钟");
     expect(routeChangeEmail.html).toContain("原最晚出发时间");

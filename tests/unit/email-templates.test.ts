@@ -51,6 +51,7 @@ describe("email templates", () => {
     expect(email.text).toContain("出发时间已更新");
     expect(email.text).toContain("变化约 5 分钟");
     expect(email.text).toContain("受路况影响，出发时间变化约 5 分钟");
+    expect(email.text).toContain("原最晚出发时间：08:30");
     expect(email.text).toContain("最晚出发时间：08:35");
     expect(email.html).toContain("出发时间已更新");
     expect(email.html).toContain("受路况影响，出发时间变化约 5 分钟");
