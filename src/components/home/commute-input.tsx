@@ -105,7 +105,6 @@ export function CommuteInput() {
           <Mic aria-hidden="true" className="size-5" />
         </button>
         <button
-          aria-label="Start commute planning"
           className="absolute right-2 top-1/2 flex h-12 min-w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[#2563eb] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isSubmitting}
           type="submit"

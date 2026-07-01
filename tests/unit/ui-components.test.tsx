@@ -290,6 +290,12 @@ describe("sample-aligned UI components", () => {
     });
   });
 
+  it("uses the visible planning text as the home submit button name", () => {
+    render(<CommuteInput />);
+
+    expect(screen.getByRole("button", { name: "规划" })).toBeTruthy();
+  });
+
   it("stores the prompt before routing from home to agent", async () => {
     const fetchMock = vi.fn(async () =>
       Response.json(
