@@ -129,11 +129,13 @@ function ctaBlock(detailsUrl: string, stopMonitoringUrl: string) {
 }
 
 function buildPlainText(
+  brand: string,
   heading: string,
   input: CommuteEmailTemplateInput,
   intro?: string
 ) {
   return [
+    brand,
     heading,
     intro,
     `行程：${input.tripTitle}`,
@@ -167,7 +169,7 @@ export function buildDepartureReminderEmail(
 
   return {
     subject: "通勤提醒：该出发了",
-    text: buildPlainText("该出发了", input),
+    text: buildPlainText(appName, "该出发了", input),
     html,
   };
 }
@@ -192,7 +194,7 @@ export function buildRouteChangeEmail(
 
   return {
     subject: `通勤时间已变化：${input.tripTitle}`,
-    text: buildPlainText("出发时间已更新", input, `变化约 ${Math.round(input.changeMinutes)} 分钟`),
+    text: buildPlainText("Lumina Velocity", "出发时间已更新", input, changeText),
     html,
   };
 }

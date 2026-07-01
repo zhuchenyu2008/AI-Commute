@@ -23,13 +23,18 @@ describe("email templates", () => {
     const email = buildDepartureReminderEmail(baseInput);
 
     expect(email.subject).toBe("通勤提醒：该出发了");
+    expect(email.text).toContain("AI Commute");
     expect(email.text).toContain("该出发了");
     expect(email.text).toContain("最晚出发时间：08:35");
+    expect(email.text).toContain("预计到达时间");
     expect(email.text).toContain("科技园区A座");
+    expect(email.text).toContain("查看实时地图");
+    expect(email.text).toContain("/trips/trip-1");
     expect(email.html).toContain("AI Commute");
     expect(email.html).toContain("该出发了");
     expect(email.html).toContain("08:35");
     expect(email.html).toContain("预计到达时间");
+    expect(email.html).toContain("科技园区A座");
     expect(email.html).toContain("查看实时地图");
     expect(email.html).toContain("/trips/trip-1");
   });
@@ -42,8 +47,10 @@ describe("email templates", () => {
     });
 
     expect(email.subject).toBe("通勤时间已变化：家到科技园");
+    expect(email.text).toContain("Lumina Velocity");
     expect(email.text).toContain("出发时间已更新");
     expect(email.text).toContain("变化约 5 分钟");
+    expect(email.text).toContain("受路况影响，出发时间变化约 5 分钟");
     expect(email.text).toContain("最晚出发时间：08:35");
     expect(email.html).toContain("出发时间已更新");
     expect(email.html).toContain("受路况影响，出发时间变化约 5 分钟");
