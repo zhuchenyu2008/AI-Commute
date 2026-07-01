@@ -91,8 +91,8 @@ function baseContainer(title: string, innerHtml: string) {
     <title>${escapeHtml(title)}</title>
   </head>
   <body style="margin:0;background:${SURFACE};font-family:Inter,Arial,'Microsoft YaHei',sans-serif;color:${TEXT};">
-    <div style="max-width:560px;margin:0 auto;background:#ffffff;">
-      <div style="padding:32px 28px 36px;">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;">
+      <div style="padding:40px 44px 44px;">
         ${innerHtml}
       </div>
     </div>
@@ -101,7 +101,7 @@ function baseContainer(title: string, innerHtml: string) {
 }
 
 function timeValue(value: string) {
-  return `<span style="color:${LINK_BLUE};font-weight:800;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;">${escapeHtml(value)}</span>`;
+  return `<span style="color:${LINK_BLUE};font-weight:700;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;">${escapeHtml(value)}</span>`;
 }
 
 function metricRow({
@@ -117,10 +117,10 @@ function metricRow({
 }) {
   return `
     <tr>
-      <td style="width:56px;padding:9px 14px 9px 0;vertical-align:top;font-size:30px;line-height:36px;">${icon}</td>
-      <td style="padding:8px 0;vertical-align:top;">
-        <div style="font-size:16px;color:${MUTED};line-height:24px;">${escapeHtml(label)}</div>
-        <div style="margin-top:2px;font-size:34px;font-weight:800;line-height:42px;color:${accent ? LINK_BLUE : TEXT};">${accent ? timeValue(value) : escapeHtml(value)}</div>
+      <td style="width:48px;padding:5px 12px 5px 0;vertical-align:top;font-size:24px;line-height:30px;">${icon}</td>
+      <td style="padding:4px 0;vertical-align:top;">
+        <div style="font-size:14px;color:${MUTED};line-height:20px;">${escapeHtml(label)}</div>
+        <div style="margin-top:1px;font-size:28px;font-weight:700;line-height:34px;color:${accent ? LINK_BLUE : TEXT};">${accent ? timeValue(value) : escapeHtml(value)}</div>
       </td>
     </tr>`;
 }
@@ -154,16 +154,16 @@ function detailsCard(input: CommuteEmailTemplateInput) {
   const weatherSummary = valueOrPending(input.weatherSummary);
 
   return `
-    <div style="margin-top:28px;padding:22px 24px;border:1px solid ${OUTLINE};border-radius:18px;background:#ffffff;">
-      <div style="font-size:16px;color:${MUTED};line-height:24px;">目的地</div>
-      <div style="margin-top:4px;font-size:23px;font-weight:800;color:${TEXT};line-height:32px;">${escapeHtml(input.destinationName)}</div>
-      <div style="margin-top:4px;font-size:16px;color:${MUTED};line-height:24px;">${escapeHtml(destinationAddress)}</div>
-      <div style="height:22px;"></div>
-      <div style="font-size:16px;color:${MUTED};line-height:24px;">路线</div>
-      <div style="margin-top:4px;font-size:19px;font-weight:700;color:${TEXT};line-height:28px;">${escapeHtml(routeTitle)}</div>
-      <div style="height:22px;"></div>
-      <div style="font-size:16px;color:${MUTED};line-height:24px;">天气</div>
-      <div style="margin-top:4px;font-size:19px;font-weight:700;color:${TEXT};line-height:28px;">${escapeHtml(weatherSummary)}</div>
+    <div style="margin-top:24px;padding:18px 22px;border:1px solid ${OUTLINE};border-radius:18px;background:#ffffff;">
+      <div style="font-size:14px;color:${MUTED};line-height:20px;">目的地</div>
+      <div style="margin-top:4px;font-size:20px;font-weight:700;color:${TEXT};line-height:28px;">${escapeHtml(input.destinationName)}</div>
+      <div style="margin-top:3px;font-size:14px;color:${MUTED};line-height:20px;">${escapeHtml(destinationAddress)}</div>
+      <div style="height:18px;"></div>
+      <div style="font-size:14px;color:${MUTED};line-height:20px;">路线</div>
+      <div style="margin-top:4px;font-size:16px;font-weight:700;color:${TEXT};line-height:24px;">${escapeHtml(routeTitle)}</div>
+      <div style="height:18px;"></div>
+      <div style="font-size:14px;color:${MUTED};line-height:20px;">天气</div>
+      <div style="margin-top:4px;font-size:16px;font-weight:700;color:${TEXT};line-height:24px;">${escapeHtml(weatherSummary)}</div>
     </div>`;
 }
 
@@ -173,7 +173,7 @@ function actionAndFooterBlock(input: CommuteEmailTemplateInput, footerText: stri
   const cta = detailsUrl
     ? `
       <div style="margin-top:28px;">
-        <a href="${escapeHtml(detailsUrl)}" style="display:inline-block;background:${BRAND_BLUE};color:#ffffff;text-decoration:none;font-size:18px;font-weight:800;line-height:26px;padding:15px 30px;border-radius:10px;">查看实时地图</a>
+        <a href="${escapeHtml(detailsUrl)}" style="display:inline-block;background:${BRAND_BLUE};color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;line-height:24px;padding:14px 26px;border-radius:10px;">查看实时地图</a>
       </div>`
     : "";
   const stopLink = stopMonitoringUrl
@@ -189,13 +189,13 @@ function actionAndFooterBlock(input: CommuteEmailTemplateInput, footerText: stri
 
 function compactHeader(appName: string, tone: "brand" | "error" = "brand") {
   return `
-    <div style="font-size:18px;font-weight:800;color:${tone === "error" ? ERROR : BRAND_BLUE};line-height:26px;">
+    <div style="font-size:18px;font-weight:700;color:${tone === "error" ? ERROR : BRAND_BLUE};line-height:26px;">
       ${escapeHtml(appName)}
     </div>`;
 }
 
 function buildPlainText(
-  brand: string,
+  brand: string | null,
   heading: string,
   input: CommuteEmailTemplateInput,
   intro?: string
@@ -230,8 +230,8 @@ export function buildDepartureReminderEmail(
     "通勤提醒：该出发了",
     `
       ${compactHeader(appName)}
-      <h1 style="margin:22px 0 0;font-size:38px;line-height:48px;color:${TEXT};font-weight:800;">该出发了</h1>
-      <p style="margin:18px 0 0;font-size:18px;line-height:32px;color:${MUTED};">请在 ${timeValue(latestDepartAt)} 前出发，预留足够通勤时间抵达 ${escapeHtml(input.destinationName)}。</p>
+      <h1 style="margin:24px 0 0;font-size:30px;line-height:40px;color:${TEXT};font-weight:700;">该出发了</h1>
+      <p style="margin:18px 0 0;font-size:16px;line-height:30px;color:${MUTED};">请在 ${timeValue(latestDepartAt)} 前出发，预留足够通勤时间抵达 ${escapeHtml(input.destinationName)}。</p>
       ${metricsBlock(input)}
       ${detailsCard(input)}
       ${actionAndFooterBlock(input, "此为自动发送的行程提醒邮件。")}
@@ -248,7 +248,6 @@ export function buildDepartureReminderEmail(
 export function buildRouteChangeEmail(
   input: RouteChangeEmailTemplateInput
 ): BuiltEmailTemplate {
-  const appName = resolveAppName(input);
   const roundedChangeMinutes = Math.round(Math.abs(input.changeMinutes));
   const changeText = `受路况影响，出发时间变化约 ${roundedChangeMinutes} 分钟`;
   const previousDepartAt = formatBeijingTime(input.previousLatestDepartAt);
@@ -259,10 +258,9 @@ export function buildRouteChangeEmail(
   const html = baseContainer(
     `通勤时间已变化：${input.tripTitle}`,
     `
-      ${compactHeader(appName, "error")}
-      <h1 style="margin:22px 0 0;font-size:38px;line-height:48px;color:${TEXT};font-weight:800;">出发时间已更新</h1>
-      <p style="margin:18px 0 0;font-size:18px;line-height:32px;color:${MUTED};">${escapeHtml(changeText)}，请按新的最晚出发时间安排。</p>
-      <div style="margin-top:22px;padding:18px 20px;border-left:6px solid ${ERROR};background:#fff7f7;font-size:17px;color:${TEXT};line-height:26px;">
+      <h1 style="margin:24px 0 0;font-size:30px;line-height:40px;color:${TEXT};font-weight:700;">出发时间已更新</h1>
+      <p style="margin:18px 0 0;font-size:16px;line-height:30px;color:${MUTED};">${escapeHtml(changeText)}，请按新的最晚出发时间安排。</p>
+      <div style="margin-top:22px;padding:16px 18px;border-left:5px solid ${ERROR};background:#fff7f7;font-size:16px;color:${TEXT};line-height:26px;">
         原最晚出发时间：${timeValue(previousDepartAt)}
       </div>
       ${metricsBlock(input)}
@@ -273,7 +271,7 @@ export function buildRouteChangeEmail(
 
   return {
     subject: `通勤时间已变化：${input.tripTitle}`,
-    text: buildPlainText(appName, "出发时间已更新", input, plainTextIntro),
+    text: buildPlainText(null, "出发时间已更新", input, plainTextIntro),
     html,
   };
 }

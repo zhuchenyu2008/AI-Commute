@@ -13,6 +13,7 @@ import {
   type BuiltEmailTemplate,
   type CommuteEmailTemplateInput,
 } from "@/lib/notifications/email-templates";
+import { buildAmapLink } from "@/lib/notifications/map-links";
 import {
   type NotificationSendStatus,
   writeNotificationLog,
@@ -52,6 +53,7 @@ type SnapshotLegInput = {
 } | null | undefined;
 type EmailTemplateLegInput = {
   destinationName: string | null;
+  destinationLngLat?: string | null;
   latestDepartAt: Date | null;
   targetArriveAt: Date | null;
   trip?: EmailTemplateTripInput;
@@ -213,7 +215,10 @@ function buildEmailTemplateInput(
     totalMinutes: getTotalMinutes(leg),
     routeTitle: summarizeRouteTitle(leg),
     weatherSummary: "以行程详情为准",
-    detailsUrl: absoluteAppUrl(tripPath),
+    detailsUrl: buildAmapLink({
+      destinationName: destination,
+      destinationLngLat: leg?.destinationLngLat,
+    }),
     stopMonitoringUrl: absoluteAppUrl(tripPath),
   };
 }

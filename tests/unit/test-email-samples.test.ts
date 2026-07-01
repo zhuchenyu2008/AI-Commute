@@ -52,23 +52,10 @@ describe("template test emails", () => {
     expect(emails.map((email) => email.text).join("\n")).not.toContain(
       "查看实时地图：/history"
     );
-  });
-
-  it("uses APP_BASE_URL for clickable sample email actions", () => {
-    const savedAppBaseUrl = process.env.APP_BASE_URL;
-    process.env.APP_BASE_URL = "https://commute.example.com";
-
-    const emails = buildTemplateTestEmails({
-      now: new Date("2026-07-01T00:00:00.000Z"),
-    });
-
-    restoreEnv("APP_BASE_URL", savedAppBaseUrl);
-
-    expect(emails[0].html).toContain(
-      'href="https://commute.example.com/history"'
-    );
+    expect(emails[0].html).toContain("查看实时地图");
+    expect(emails[0].html).toContain("https://uri.amap.com/search");
     expect(emails[0].text).toContain(
-      "查看实时地图：https://commute.example.com/history"
+      "查看实时地图：https://uri.amap.com/search"
     );
   });
 });

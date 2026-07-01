@@ -261,12 +261,13 @@ describe("scheduler reminder processing", () => {
     expect(sendEmailMock.mock.calls[0][0].html).not.toContain(
       "localhost:3000"
     );
-    expect(sendEmailMock.mock.calls[0][0].html).not.toContain(
-      "查看实时地图"
+    expect(sendEmailMock.mock.calls[0][0].html).toContain("查看实时地图");
+    expect(sendEmailMock.mock.calls[0][0].html).toContain(
+      "https://uri.amap.com/marker"
     );
     expect(sendEmailMock.mock.calls[0][0].html).not.toContain('href="#"');
-    expect(sendEmailMock.mock.calls[0][0].text).not.toContain(
-      "查看实时地图："
+    expect(sendEmailMock.mock.calls[0][0].text).toContain(
+      "查看实时地图：https://uri.amap.com/marker"
     );
 
     await processDueReminderJobs({ now });
