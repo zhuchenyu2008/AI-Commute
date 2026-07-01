@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildTemplateEmailRecipientQuery,
@@ -100,5 +102,22 @@ describe("template test email sending", () => {
 
     expect(sendEmail).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("send test emails script environment loading", () => {
+  it("loads .env before importing the Prisma runtime dependency", () => {
+    const source = readFileSync(
+      join(process.cwd(), "scripts/send-test-emails.ts"),
+      "utf8"
+    );
+    const loadEnvIndex = source.indexOf("loadEnvConfig(process.cwd())");
+    const dbImportIndex = source.indexOf("@/lib/db");
+
+    expect(source).toContain('import { loadEnvConfig } from "@next/env";');
+    expect(source).not.toContain('import { prisma } from "@/lib/db";');
+    expect(loadEnvIndex).toBeGreaterThanOrEqual(0);
+    expect(dbImportIndex).toBeGreaterThanOrEqual(0);
+    expect(loadEnvIndex).toBeLessThan(dbImportIndex);
   });
 });

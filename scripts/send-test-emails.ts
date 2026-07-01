@@ -1,13 +1,25 @@
-import { prisma } from "@/lib/db";
-import { sendEmail } from "@/lib/notifications/email";
-import {
-  buildTemplateEmailRecipientQuery,
-  selectTemplateEmailRecipient,
-} from "@/lib/notifications/test-email-recipient";
-import { sendTemplateTestEmails } from "@/lib/notifications/test-email-sender";
-import { buildTemplateTestEmails } from "@/lib/notifications/test-email-samples";
+import { loadEnvConfig } from "@next/env";
+
+loadEnvConfig(process.cwd());
+
+let disconnectPrisma: (() => Promise<void>) | null = null;
 
 async function main() {
+  const { prisma } = await import("@/lib/db");
+  const { sendEmail } = await import("@/lib/notifications/email");
+  const {
+    buildTemplateEmailRecipientQuery,
+    selectTemplateEmailRecipient,
+  } = await import("@/lib/notifications/test-email-recipient");
+  const { sendTemplateTestEmails } = await import(
+    "@/lib/notifications/test-email-sender"
+  );
+  const { buildTemplateTestEmails } = await import(
+    "@/lib/notifications/test-email-samples"
+  );
+
+  disconnectPrisma = () => prisma.$disconnect();
+
   const settings = await prisma.userSettings.findMany(
     buildTemplateEmailRecipientQuery()
   );
@@ -34,5 +46,5 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnectPrisma?.();
   });
