@@ -57,7 +57,15 @@ function formatMinutes(minutes: number | null | undefined) {
 }
 
 function normalizeUrl(url: string | undefined) {
-  return url?.trim() || "#";
+  const trimmed = url?.trim();
+
+  if (!trimmed) return "#";
+  if (trimmed === "#" || (trimmed.startsWith("/") && !trimmed.startsWith("//"))) {
+    return trimmed;
+  }
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  return "#";
 }
 
 function keyFact(label: string, value: string, icon: string) {

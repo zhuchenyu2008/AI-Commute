@@ -70,4 +70,33 @@ describe("email templates", () => {
     expect(email.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(email.html).toContain("地铁 &lt;4&gt; 号线");
   });
+
+  it("sanitizes email href urls while preserving allowed destinations", () => {
+    const dangerousEmail = buildDepartureReminderEmail({
+      ...baseInput,
+      detailsUrl: "javascript:alert(1)",
+      stopMonitoringUrl: "data:text/html,<b>x</b>",
+    });
+    const protocolRelativeEmail = buildDepartureReminderEmail({
+      ...baseInput,
+      detailsUrl: "//evil.example/trips/1",
+      stopMonitoringUrl: "trips/1",
+    });
+
+    expect(dangerousEmail.html).not.toContain("javascript:alert(1)");
+    expect(dangerousEmail.html).not.toContain("data:text/html");
+    expect(dangerousEmail.html).toContain('href="#"');
+    expect(protocolRelativeEmail.html).not.toContain("//evil.example/trips/1");
+    expect(protocolRelativeEmail.html).not.toContain('href="trips/1"');
+    expect(protocolRelativeEmail.html).toContain('href="#"');
+
+    const allowedEmail = buildDepartureReminderEmail({
+      ...baseInput,
+      detailsUrl: " https://example.com/trips/1 ",
+      stopMonitoringUrl: "/trips/1",
+    });
+
+    expect(allowedEmail.html).toContain('href="https://example.com/trips/1"');
+    expect(allowedEmail.html).toContain('href="/trips/1"');
+  });
 });
