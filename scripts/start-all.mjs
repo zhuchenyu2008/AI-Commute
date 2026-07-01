@@ -258,19 +258,19 @@ export function buildStartupReport({ values, services, webReady }) {
   const webUrl = getWebUrl(values);
   const telegramRunning = services.some((service) => service.name === "telegram");
   const webStatus = webReady
-    ? "ready"
-    : "still starting; watch [web] logs";
+    ? "已就绪"
+    : "仍在启动，请查看 [web] 日志";
 
   return [
-    "[ready] Native deployment started.",
-    `[ready] Web: ${webUrl} (${webStatus})`,
-    "[ready] Scheduler: running; ticks every 60 seconds.",
+    "[ready] 本机部署已启动。",
+    `[ready] Web 访问地址：${webUrl}（${webStatus}）`,
+    "[ready] 定时任务：运行中，每 60 秒执行一次。",
     telegramRunning
-      ? "[ready] Telegram: running."
-      : "[ready] Telegram: skipped; TELEGRAM_BOT_TOKEN is empty.",
-    `[ready] Login user: ${values.SEED_USER_EMAIL || "(not configured)"}`,
-    `[ready] Login password: ${values.SEED_USER_PASSWORD || "(not configured)"}`,
-    "[ready] Stop all services: press Ctrl+C."
+      ? "[ready] Telegram：运行中。"
+      : "[ready] Telegram：已跳过，TELEGRAM_BOT_TOKEN 未配置。",
+    `[ready] 登录用户名：${values.SEED_USER_EMAIL || "未配置"}`,
+    `[ready] 登录密码：${values.SEED_USER_PASSWORD || "未配置"}`,
+    "[ready] 停止所有服务：按 Ctrl+C。"
   ];
 }
 

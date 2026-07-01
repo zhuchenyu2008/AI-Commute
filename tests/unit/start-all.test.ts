@@ -532,13 +532,13 @@ describe("native one-click deployment runtime planning", () => {
         webReady: true
       })
     ).toEqual([
-      "[ready] Native deployment started.",
-      "[ready] Web: http://127.0.0.1:3100 (ready)",
-      "[ready] Scheduler: running; ticks every 60 seconds.",
-      "[ready] Telegram: skipped; TELEGRAM_BOT_TOKEN is empty.",
-      "[ready] Login user: user@example.local",
-      "[ready] Login password: generated-password",
-      "[ready] Stop all services: press Ctrl+C."
+      "[ready] 本机部署已启动。",
+      "[ready] Web 访问地址：http://127.0.0.1:3100（已就绪）",
+      "[ready] 定时任务：运行中，每 60 秒执行一次。",
+      "[ready] Telegram：已跳过，TELEGRAM_BOT_TOKEN 未配置。",
+      "[ready] 登录用户名：user@example.local",
+      "[ready] 登录密码：generated-password",
+      "[ready] 停止所有服务：按 Ctrl+C。"
     ]);
   });
 
@@ -558,7 +558,7 @@ describe("native one-click deployment runtime planning", () => {
         webReady: false
       })
     ).toContain(
-      "[ready] Web: http://127.0.0.1:3000 (still starting; watch [web] logs)"
+      "[ready] Web 访问地址：http://127.0.0.1:3000（仍在启动，请查看 [web] 日志）"
     );
     expect(
       buildStartupReport({
@@ -566,7 +566,7 @@ describe("native one-click deployment runtime planning", () => {
         services: buildServicePlan(values),
         webReady: false
       })
-    ).toContain("[ready] Telegram: running.");
+    ).toContain("[ready] Telegram：运行中。");
   });
 
   it("merges prepared values into child process env with prepared values winning", async () => {
