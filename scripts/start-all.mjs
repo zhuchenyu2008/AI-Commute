@@ -341,11 +341,17 @@ export function createChildEnv(values, baseEnv = process.env) {
 
 export function normalizeCommand(command, platform = process.platform) {
   const [executable, ...args] = command;
-  const normalizedExecutable =
-    platform === "win32" && executable === "npm" ? "npm.cmd" : executable;
+
+  if (platform === "win32" && executable === "npm") {
+    return {
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "npm.cmd", ...args],
+      shell: false
+    };
+  }
 
   return {
-    command: normalizedExecutable,
+    command: executable,
     args,
     shell: false
   };

@@ -527,12 +527,12 @@ describe("native one-click deployment runtime planning", () => {
     });
   });
 
-  it("normalizes npm commands without shelling through Windows command processors", async () => {
+  it("normalizes npm commands through cmd.exe on Windows so npm.cmd can run", async () => {
     const { normalizeCommand } = await loadRuntimeStartAll();
 
     expect(normalizeCommand(["npm", "run", "start"], "win32")).toEqual({
-      command: "npm.cmd",
-      args: ["run", "start"],
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "npm.cmd", "run", "start"],
       shell: false
     });
     expect(normalizeCommand(["npm", "run", "start"], "linux")).toEqual({

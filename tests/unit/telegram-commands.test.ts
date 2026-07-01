@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildTripSwitchKeyboard,
   parseTelegramCallbackData,
@@ -119,6 +119,9 @@ describe("Telegram command parsing", () => {
   });
 
   it("formats a final trip plan with Beijing times, legs, buffers, reminders, and monitoring status", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T23:00:00.000Z"));
+
     const message = formatFinalTripPlanMessage({
       title: "家-办公室",
       status: "monitoring",
@@ -209,6 +212,8 @@ describe("Telegram command parsing", () => {
       ],
       latestRecalculation: null,
     });
+
+    vi.useRealTimers();
 
     expect(message).toContain("最终行程计划");
     expect(message).toContain("家-办公室");
