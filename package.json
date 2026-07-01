@@ -16,6 +16,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "scheduler:tick": "tsx scripts/scheduler.ts",
+    "email:test-templates": "tsx scripts/send-test-emails.ts",
     "telegram:poll": "tsx scripts/telegram-poll.ts"
   },
   "dependencies": {
