@@ -75,6 +75,33 @@ describe("email notifications", () => {
     );
   });
 
+  it("passes html bodies to nodemailer when provided", async () => {
+    setCompleteSmtpEnv();
+    createTransportMock.mockReturnValue({ sendMail: sendMailMock });
+    sendMailMock.mockResolvedValue({});
+
+    const result = await sendEmail({
+      to: "receiver@example.com",
+      subject: "HTML test",
+      text: "Plain text fallback",
+      html: "<p>HTML body</p>",
+    });
+
+    expect(result).toMatchObject({
+      status: "sent",
+      recipient: "receiver@example.com",
+    });
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: "sender@example.com",
+        to: "receiver@example.com",
+        subject: "HTML test",
+        text: "Plain text fallback",
+        html: "<p>HTML body</p>",
+      })
+    );
+  });
+
   it("returns an actionable certificate diagnostic for Node TLS chain errors", async () => {
     setCompleteSmtpEnv();
     createTransportMock.mockReturnValue({ sendMail: sendMailMock });

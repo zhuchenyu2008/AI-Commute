@@ -6,6 +6,7 @@ export type EmailSendInput = {
   to?: string | null;
   subject: string;
   text: string;
+  html?: string;
 };
 
 const hasValue = (value: string | undefined | null): value is string =>
@@ -58,6 +59,7 @@ export async function sendEmail({
   to,
   subject,
   text,
+  html,
 }: EmailSendInput): Promise<NotificationSendResult> {
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
@@ -102,6 +104,7 @@ export async function sendEmail({
       to: toAddress,
       subject,
       text,
+      ...(html ? { html } : {}),
     });
 
     return { status: "sent", recipient };
