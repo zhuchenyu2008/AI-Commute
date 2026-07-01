@@ -8,6 +8,12 @@ import {
 import { prisma } from "@/lib/db";
 import { sendEmail } from "@/lib/notifications/email";
 import {
+  buildDepartureReminderEmail,
+  buildRouteChangeEmail,
+  type BuiltEmailTemplate,
+  type CommuteEmailTemplateInput,
+} from "@/lib/notifications/email-templates";
+import {
   type NotificationSendStatus,
   writeNotificationLog,
 } from "@/lib/notifications/log";
@@ -35,6 +41,15 @@ export type SchedulerTickResult = {
 
 type DueReminderJob = Awaited<ReturnType<typeof findDueReminderJobs>>[number];
 type RouteSnapshot = ReturnType<typeof snapshotLeg>;
+type SnapshotLegInput = {
+  id: string;
+  order: number;
+  latestDepartAt: Date | null;
+  selectedCandidate?: {
+    routeMinutes: number;
+    totalMinutes: number;
+  } | null;
+} | null | undefined;
 
 const DEFAULT_ROUTE_CHANGE_THRESHOLD_MINUTES = 3;
 
@@ -114,9 +129,59 @@ function getReminderCadenceMinutes(job: DueReminderJob) {
   }
 }
 
-function snapshotLeg(
-  leg: NonNullable<DueReminderJob["leg"]> | null | undefined
-) {
+function absoluteAppUrl(path: string) {
+  const baseUrl = process.env.APP_BASE_URL?.trim();
+
+  if (!baseUrl) return path;
+
+  return new URL(
+    path,
+    baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`
+  ).toString();
+}
+
+function summarizeRouteTitle(job: DueReminderJob) {
+  const segmentTitle = job.leg?.routeSegments
+    ?.map((segment) => segment.title)
+    .filter(Boolean)
+    .join(" -> ");
+
+  return (
+    job.leg?.selectedCandidate?.title ??
+    (segmentTitle || null) ??
+    "查看行程详情"
+  );
+}
+
+function getTotalMinutes(job: DueReminderJob) {
+  return (
+    job.leg?.selectedCandidate?.totalMinutes ??
+    job.leg?.selectedCandidate?.routeMinutes ??
+    null
+  );
+}
+
+function buildEmailTemplateInput(
+  job: DueReminderJob
+): CommuteEmailTemplateInput {
+  const destination =
+    job.leg?.destinationName ?? job.trip.finalStopName ?? job.trip.title;
+  const tripPath = `/trips/${job.tripId}`;
+
+  return {
+    tripTitle: job.trip.title,
+    destinationName: destination,
+    latestDepartAt: job.leg?.latestDepartAt ?? job.scheduledFor,
+    targetArriveAt: job.leg?.targetArriveAt ?? job.trip.targetArriveAt,
+    totalMinutes: getTotalMinutes(job),
+    routeTitle: summarizeRouteTitle(job),
+    weatherSummary: "以行程详情为准",
+    detailsUrl: absoluteAppUrl(tripPath),
+    stopMonitoringUrl: absoluteAppUrl(tripPath),
+  };
+}
+
+function snapshotLeg(leg: SnapshotLegInput) {
   if (!leg) return null;
 
   return {
@@ -225,6 +290,7 @@ async function deliverReminderNotification(input: {
   job: DueReminderJob;
   subject: string;
   content: string;
+  email?: BuiltEmailTemplate;
   notificationKind?: string;
   notificationLegId?: string | null;
 }) {
@@ -256,8 +322,9 @@ async function deliverReminderNotification(input: {
     ),
     sendEmail({
       to: emailRecipient,
-      subject: input.subject,
-      text: input.content,
+      subject: input.email?.subject ?? input.subject,
+      text: input.email?.text ?? input.content,
+      html: input.email?.html,
     }).then(async (result) => {
       await writeNotificationLog({
         tripId: input.job.tripId,
@@ -312,7 +379,8 @@ async function processDepartureReminderJob(
   }
 
   const content = buildReminderText(job);
-  const subject = `通勤提醒：${job.trip.title}`;
+  const email = buildDepartureReminderEmail(buildEmailTemplateInput(job));
+  const subject = email.subject;
   let recalculationId: string | null = null;
 
   try {
@@ -331,6 +399,7 @@ async function processDepartureReminderJob(
       job,
       subject,
       content,
+      email,
     });
     const status = resolveJobStatus(deliveryResults);
 
@@ -452,10 +521,16 @@ async function processRouteRecheckJob(
       changeMinutes,
       latestDepartAt: after?.latestDepartAt,
     });
+    const email = buildRouteChangeEmail({
+      ...buildEmailTemplateInput(job),
+      latestDepartAt: after?.latestDepartAt ?? job.leg?.latestDepartAt,
+      changeMinutes,
+    });
     const deliveryResults = await deliverReminderNotification({
       job,
-      subject: `通勤时间已变化：${job.trip.title}`,
+      subject: email.subject,
       content,
+      email,
       notificationKind: "route_change",
       notificationLegId: after?.id ?? null,
     });

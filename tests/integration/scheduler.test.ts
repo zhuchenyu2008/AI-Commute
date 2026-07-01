@@ -243,6 +243,14 @@ describe("scheduler reminder processing", () => {
       `${trip.id}:${leg.id}:email:depart_now:${now.toISOString()}`,
       `${trip.id}:${leg.id}:telegram:depart_now:${now.toISOString()}`,
     ]);
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "scheduler@example.com",
+        subject: "通勤提醒：该出发了",
+        text: expect.stringContaining("该出发了"),
+        html: expect.stringContaining("该出发了"),
+      })
+    );
 
     await processDueReminderJobs({ now });
 
@@ -523,8 +531,9 @@ describe("scheduler reminder processing", () => {
     expect(sendEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "scheduler@example.com",
-        subject: expect.stringContaining("时间已变化"),
-        text: expect.stringContaining("时间已变化"),
+        subject: "通勤时间已变化：Home-Office",
+        text: expect.stringContaining("出发时间已更新"),
+        html: expect.stringContaining("出发时间已更新"),
       })
     );
   });
