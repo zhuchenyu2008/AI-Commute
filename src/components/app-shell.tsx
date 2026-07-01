@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import { MapPin } from "lucide-react";
 import { BottomNav, type NavKey } from "@/components/bottom-nav";
@@ -48,7 +49,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-[104px] pt-8 md:px-6 md:pb-12 md:pt-24">
+      <main className="page-enter relative z-10 mx-auto w-full max-w-6xl px-5 pb-[104px] pt-8 md:px-6 md:pb-12 md:pt-24">
         {children}
       </main>
       <BottomNav active={active} />

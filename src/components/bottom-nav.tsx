@@ -26,9 +26,9 @@ export function BottomNav({ active }: { active: NavKey }) {
             <Link
               aria-current={isActive ? "page" : undefined}
               aria-label={item.label}
-              className={`flex min-h-14 min-w-16 flex-col items-center justify-center gap-1 rounded-full px-3 py-2 text-xs font-semibold transition ${
+              className={`nav-item-motion flex min-h-14 min-w-16 flex-col items-center justify-center gap-1 rounded-full px-3 py-2 text-xs font-semibold transition ${
                 isActive
-                  ? "bg-[#2563eb] text-white shadow-sm"
+                  ? "nav-item-active bg-[#2563eb] text-white shadow-sm"
                   : "text-[#434655] hover:bg-white/80 hover:text-[#2563eb]"
               }`}
               href={item.href}

@@ -12,6 +12,7 @@ import {
   getAgentSessionViewState,
 } from "@/components/agent/agent-event-list";
 import { buildAgentEvents, formatAgentToolName } from "@/lib/agent/events";
+import { AppShell } from "@/components/app-shell";
 import { BottomNav } from "@/components/bottom-nav";
 import { HistoryDateFilter } from "@/components/history/history-date-filter";
 import { CommuteInput, getAgentStartResult } from "@/components/home/commute-input";
@@ -58,6 +59,23 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain("历史");
     expect(html).toContain("设置");
     expect(html).toContain("记忆");
+  });
+
+  it("marks AppShell main content for page enter motion", () => {
+    const html = renderToStaticMarkup(
+      <AppShell active="home">
+        <div>Content</div>
+      </AppShell>
+    );
+
+    expect(html).toContain("page-enter");
+  });
+
+  it("marks active bottom navigation items for smooth state motion", () => {
+    const html = renderToStaticMarkup(<BottomNav active="history" />);
+
+    expect(html).toContain("nav-item-motion");
+    expect(html).toContain("nav-item-active");
   });
 
   it("renders buffer items with weather as zero-minute context", () => {
