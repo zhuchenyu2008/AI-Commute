@@ -66,7 +66,7 @@ function SelectField({ defaultValue, id, name, options }: SelectFieldProps) {
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-left text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+        className="flex w-full items-center justify-between gap-3 rounded-2xl border form-field-frame px-4 py-3 text-left text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
         id={id}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={onKeyDown}
@@ -258,7 +258,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
         >
           <span className="text-sm font-medium text-on-surface-variant">默认城市</span>
           <input
-            className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+            className="w-full rounded-2xl border form-field-frame px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
             id="defaultCity"
             name="defaultCity"
             onChange={(event) => setDefaultCity(event.target.value)}
@@ -289,7 +289,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
             <div className="flex gap-2">
               <input
                 aria-label="搜索默认出发点"
-                className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+                className="min-w-0 flex-1 rounded-2xl border form-field-frame px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
                 onChange={(event) => setOriginQuery(event.target.value)}
                 placeholder="搜索地点，例如外事学校"
                 type="search"
@@ -358,7 +358,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
             路线变化提醒阈值
           </span>
           <input
-            className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+            className="w-full rounded-2xl border form-field-frame px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
             defaultValue={routeChangeThresholdMinutes}
             id="routeChangeThresholdMinutes"
             max={120}
@@ -374,7 +374,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 aria-label="Telegram Chat ID"
-                className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+                className="min-w-0 flex-1 rounded-2xl border form-field-frame px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
                 id="telegramChatId"
                 name="telegramChatId"
                 onChange={(event) => setTelegramChatId(event.target.value)}
@@ -408,7 +408,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 aria-label="邮件接收人"
-                className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+                className="min-w-0 flex-1 rounded-2xl border form-field-frame px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
                 id="emailRecipient"
                 name="emailRecipient"
                 onChange={(event) => setEmailRecipient(event.target.value)}

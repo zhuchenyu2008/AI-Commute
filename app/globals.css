@@ -21,3 +21,9 @@ body {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.5);
 }
+
+@layer components {
+  .form-field-frame {
+    @apply border-outline-variant bg-white/95 shadow-sm shadow-slate-200/60 focus:border-primary-container;
+  }
+}

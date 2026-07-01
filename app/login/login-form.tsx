@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import React, { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export function LoginForm() {
@@ -42,7 +42,7 @@ export function LoginForm() {
         </label>
         <input
           autoComplete="email"
-          className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-slate-950 outline-none ring-sky-500/30 transition focus:ring-4"
+          className="w-full rounded-2xl border form-field-frame px-4 py-3 text-base text-slate-950 outline-none ring-sky-500/30 transition focus:ring-4"
           id="email"
           name="email"
           required
@@ -59,7 +59,7 @@ export function LoginForm() {
         </label>
         <input
           autoComplete="current-password"
-          className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-slate-950 outline-none ring-sky-500/30 transition focus:ring-4"
+          className="w-full rounded-2xl border form-field-frame px-4 py-3 text-base text-slate-950 outline-none ring-sky-500/30 transition focus:ring-4"
           id="password"
           name="password"
           required

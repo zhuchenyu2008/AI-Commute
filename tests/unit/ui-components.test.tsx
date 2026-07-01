@@ -18,6 +18,7 @@ import { CommuteInput, getAgentStartResult } from "@/components/home/commute-inp
 import { CurrentLocationLabel } from "@/components/home/current-location-label";
 import { BufferList } from "@/components/trips/buffer-list";
 import { RouteTimeline } from "@/components/trips/route-timeline";
+import { LoginForm } from "@app/login/login-form";
 import { SettingsForm } from "@app/settings/settings-form";
 import {
   formatMonitoredDuration,
@@ -549,6 +550,46 @@ describe("sample-aligned UI components", () => {
 
     expect(html).toContain("fonts.googleapis.com");
     expect(html).toContain("family=Inter");
+  });
+
+  it("renders login and settings form controls with visible field frames", () => {
+    const loginView = render(<LoginForm />);
+
+    expect(loginView.container.querySelector("#email")?.getAttribute("class")).toContain(
+      "form-field-frame"
+    );
+    expect(
+      loginView.container.querySelector("#password")?.getAttribute("class")
+    ).toContain("form-field-frame");
+
+    cleanup();
+
+    const settingsView = render(
+      <SettingsForm
+        values={{
+          defaultCity: "Ningbo",
+          timezone: "Asia/Shanghai",
+          originName: "",
+          originLngLat: "",
+          routePreference: "balanced",
+          telegramChatId: "",
+          emailRecipient: "",
+        }}
+      />
+    );
+
+    for (const selector of [
+      "#defaultCity",
+      "#timezone",
+      'input[type="search"]',
+      "#routeChangeThresholdMinutes",
+      "#telegramChatId",
+      "#emailRecipient",
+    ]) {
+      expect(
+        settingsView.container.querySelector(selector)?.getAttribute("class")
+      ).toContain("form-field-frame");
+    }
   });
 
   it("renders a default origin selector without a visible coordinate input", () => {
