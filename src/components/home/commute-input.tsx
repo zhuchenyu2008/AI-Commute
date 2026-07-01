@@ -67,7 +67,11 @@ export function CommuteInput() {
       }
 
       if (result.route.startsWith("/agent/")) {
-        savePendingAgentPrompt(trimmedPrompt);
+        const sessionId = result.route
+          .slice("/agent/".length)
+          .split(/[/?#]/)[0];
+
+        savePendingAgentPrompt(trimmedPrompt, sessionId);
         startRouteViewTransition(() => router.push(result.route));
         return;
       }

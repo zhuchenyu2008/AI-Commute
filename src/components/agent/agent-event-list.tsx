@@ -91,7 +91,7 @@ export function AgentEventList({
   const hasContinuedRunRef = useRef(false);
 
   useEffect(() => {
-    setTransitionPrompt(takePendingAgentPrompt());
+    setTransitionPrompt(takePendingAgentPrompt(sessionId));
   }, [sessionId]);
 
   useEffect(() => {
@@ -223,6 +223,16 @@ export function AgentEventList({
   const events = session
     ? buildAgentEvents(session)
     : [];
+  const transitionEventId =
+    transitionPrompt.length > 0
+      ? events.find((event) => {
+          return (
+            event.kind === "message" &&
+            event.status === "user" &&
+            event.detail === transitionPrompt
+          );
+        })?.id ?? null
+      : null;
   const viewState = getAgentSessionViewState({ autoRedirect, session });
   const isSendDisabled = isSending || viewState.status === "running";
   const canSendMessages = allowMessages ?? !autoRedirect;
@@ -303,10 +313,7 @@ export function AgentEventList({
           events.map((event, index) => {
             const isUserMessage =
               event.kind === "message" && event.status === "user";
-            const isTransitionMessage =
-              isUserMessage &&
-              transitionPrompt.length > 0 &&
-              transitionPrompt === event.detail;
+            const isTransitionMessage = event.id === transitionEventId;
 
             return (
               <div className="contents" key={event.id}>
@@ -326,6 +333,7 @@ export function AgentEventList({
                   {isUserMessage ? (
                     <div className="flex justify-end">
                       <div
+                        aria-label="用户请求"
                         className={`max-w-[min(100%,32rem)] rounded-2xl rounded-tr-md bg-[#2563eb] px-4 py-3 text-sm font-semibold leading-6 text-white shadow-sm ${
                           isTransitionMessage ? "agent-prompt-target" : ""
                         }`}

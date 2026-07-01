@@ -325,6 +325,9 @@ describe("sample-aligned UI components", () => {
     expect(
       window.sessionStorage.getItem("commute-planner:agent-prompt")
     ).toBe("Go to the office by 9");
+    expect(
+      window.sessionStorage.getItem("commute-planner:agent-session")
+    ).toBe("session-1");
   });
 
   it("does not store an agent transition prompt for non-agent routes", async () => {
@@ -511,10 +514,60 @@ describe("sample-aligned UI components", () => {
     await screen.findByText(prompt);
 
     expect(container.querySelector("[data-agent-user-message]")).toBeTruthy();
+    expect(screen.getByLabelText("用户请求")).toBeTruthy();
     expect(
       container.querySelector('[data-agent-transition-message="true"]')
     ).toBeTruthy();
     expect(screen.getAllByText(prompt)).toHaveLength(1);
+  });
+
+  it("marks only the first duplicate user message as the agent transition target", async () => {
+    const prompt = "Go to the office by 9";
+    window.sessionStorage.setItem("commute-planner:agent-prompt", prompt);
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === "/api/agent-sessions/session-1") {
+        return Response.json({
+          session: {
+            id: "session-1",
+            tripId: null,
+            status: "completed",
+            prompt,
+            messages: [
+              {
+                id: "message-1",
+                role: "user",
+                content: prompt,
+                createdAt: "2026-06-29T00:00:00.000Z",
+              },
+              {
+                id: "message-2",
+                role: "user",
+                content: prompt,
+                createdAt: "2026-06-29T00:01:00.000Z",
+              },
+            ],
+            toolCalls: [],
+          },
+        });
+      }
+
+      return Response.json({ error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <AgentEventList autoRedirect={false} sessionId="session-1" />
+    );
+
+    await waitFor(() => {
+      expect(
+        container.querySelectorAll("[data-agent-user-message]")
+      ).toHaveLength(2);
+    });
+
+    expect(
+      container.querySelectorAll('[data-agent-transition-message="true"]')
+    ).toHaveLength(1);
   });
 
   it("redirects completed conversation sessions only after a continued run completes", async () => {
