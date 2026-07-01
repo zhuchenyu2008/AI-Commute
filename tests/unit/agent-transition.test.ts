@@ -37,6 +37,41 @@ describe("agent transition helpers", () => {
     expect(sessionStorage.getItem(AGENT_TRANSITION_PROMPT_KEY)).toBeNull();
   });
 
+  it("does not throw when saving a prompt if sessionStorage rejects writes", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    expect(() => savePendingAgentPrompt("office")).not.toThrow();
+  });
+
+  it("returns empty string when reading a pending prompt fails", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    let prompt: string | undefined;
+
+    expect(() => {
+      prompt = takePendingAgentPrompt();
+    }).not.toThrow();
+    expect(prompt).toBe("");
+  });
+
+  it("returns the read prompt when removing the pending prompt fails", () => {
+    sessionStorage.setItem(AGENT_TRANSITION_PROMPT_KEY, "office");
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    let prompt: string | undefined;
+
+    expect(() => {
+      prompt = takePendingAgentPrompt();
+    }).not.toThrow();
+    expect(prompt).toBe("office");
+  });
+
   it("calls navigate directly when View Transitions are unavailable", () => {
     const navigate = vi.fn();
 

@@ -15,7 +15,11 @@ export function savePendingAgentPrompt(prompt: string): void {
     return;
   }
 
-  window.sessionStorage.setItem(AGENT_TRANSITION_PROMPT_KEY, trimmedPrompt);
+  try {
+    window.sessionStorage.setItem(AGENT_TRANSITION_PROMPT_KEY, trimmedPrompt);
+  } catch {
+    return;
+  }
 }
 
 export function takePendingAgentPrompt(): string {
@@ -23,10 +27,19 @@ export function takePendingAgentPrompt(): string {
     return "";
   }
 
-  const prompt =
-    window.sessionStorage.getItem(AGENT_TRANSITION_PROMPT_KEY) ?? "";
+  let prompt = "";
 
-  window.sessionStorage.removeItem(AGENT_TRANSITION_PROMPT_KEY);
+  try {
+    prompt = window.sessionStorage.getItem(AGENT_TRANSITION_PROMPT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+
+  try {
+    window.sessionStorage.removeItem(AGENT_TRANSITION_PROMPT_KEY);
+  } catch {
+    return prompt;
+  }
 
   return prompt;
 }
