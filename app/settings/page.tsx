@@ -25,6 +25,7 @@ export default async function SettingsPage() {
     routePreference: settings?.routePreference ?? "balanced",
     telegramChatId: settings?.telegramChatId ?? "",
     emailRecipient: settings?.emailRecipient ?? "",
+    routeChangeThresholdMinutes: settings?.routeChangeThresholdMinutes ?? 3,
   };
 
   return (

@@ -125,6 +125,21 @@ async function ensureTelegramMigrations() {
   }
 }
 
+async function ensureRouteChangeThresholdMigration() {
+  const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    "PRAGMA table_info('UserSettings')"
+  );
+  const hasRouteChangeThreshold = columns.some(
+    (column) => column.name === "routeChangeThresholdMinutes"
+  );
+
+  if (!hasRouteChangeThreshold) {
+    await executeMigration(
+      "prisma/migrations/20260701093000_route_change_threshold/migration.sql"
+    );
+  }
+}
+
 async function ensureUniqueTelegramChatIds() {
   const settings = await prisma.userSettings.findMany({
     where: { telegramChatId: { not: null } },
@@ -179,6 +194,7 @@ export async function ensureTestDatabase() {
     } else {
       await ensureOptionalOriginMigration();
       await ensureTelegramMigrations();
+      await ensureRouteChangeThresholdMigration();
     }
   });
 

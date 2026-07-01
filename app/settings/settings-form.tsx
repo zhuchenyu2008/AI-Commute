@@ -11,6 +11,7 @@ type SettingsValues = {
   routePreference: string;
   telegramChatId: string;
   emailRecipient: string;
+  routeChangeThresholdMinutes?: number;
 };
 
 const routePreferenceOptions = [
@@ -162,6 +163,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
   const [originQuery, setOriginQuery] = useState(values.originName);
   const [places, setPlaces] = useState<PlaceCandidate[]>([]);
   const [placeStatus, setPlaceStatus] = useState("");
+  const routeChangeThresholdMinutes = values.routeChangeThresholdMinutes ?? 3;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -347,6 +349,24 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
             options={routePreferenceOptions}
           />
         </section>
+
+        <label
+          className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center"
+          htmlFor="routeChangeThresholdMinutes"
+        >
+          <span className="text-sm font-medium text-on-surface-variant">
+            路线变化提醒阈值
+          </span>
+          <input
+            className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
+            defaultValue={routeChangeThresholdMinutes}
+            id="routeChangeThresholdMinutes"
+            max={120}
+            min={1}
+            name="routeChangeThresholdMinutes"
+            type="number"
+          />
+        </label>
 
         <section className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-center">
           <span className="text-sm font-medium text-on-surface-variant">Telegram Chat ID</span>

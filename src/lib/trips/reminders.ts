@@ -7,6 +7,7 @@ export type BuildReminderScheduleInput = {
   legId: string;
   latestDepartAt: Date;
   cadenceMinutes?: readonly number[];
+  now?: Date;
 };
 
 export function buildReminderSchedule({
@@ -14,26 +15,29 @@ export function buildReminderSchedule({
   legId,
   latestDepartAt,
   cadenceMinutes = DEFAULT_REMINDER_CADENCE_MINUTES,
+  now,
 }: BuildReminderScheduleInput): ReminderJobData[] {
-  return cadenceMinutes.map((minutesBeforeDeparture) => {
-    const kind: ReminderKind =
-      minutesBeforeDeparture === 0 ? "depart_now" : "recheck";
-    const scheduledFor = new Date(
-      latestDepartAt.getTime() - minutesBeforeDeparture * 60_000
-    );
+  return cadenceMinutes
+    .map((minutesBeforeDeparture) => {
+      const kind: ReminderKind =
+        minutesBeforeDeparture === 0 ? "depart_now" : "recheck";
+      const scheduledFor = new Date(
+        latestDepartAt.getTime() - minutesBeforeDeparture * 60_000
+      );
 
-    return {
-      tripId,
-      legId,
-      kind,
-      scheduledFor,
-      dedupeKey: `${tripId}:${legId}:${kind}:${minutesBeforeDeparture}`,
-      payloadJson: JSON.stringify({
+      return {
         tripId,
         legId,
         kind,
-        minutesBeforeDeparture,
-      }),
-    };
-  });
+        scheduledFor,
+        dedupeKey: `${tripId}:${legId}:${kind}:${minutesBeforeDeparture}`,
+        payloadJson: JSON.stringify({
+          tripId,
+          legId,
+          kind,
+          minutesBeforeDeparture,
+        }),
+      };
+    })
+    .filter((reminder) => !now || reminder.scheduledFor >= now);
 }

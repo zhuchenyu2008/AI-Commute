@@ -67,7 +67,7 @@ type PlanningSettings = {
   routePreference: string;
 };
 
-type RunPlanningSessionOptions = {
+export type RunPlanningSessionOptions = {
   chatClient?: AgentChatClient;
   amapClient?: AmapClient;
 };

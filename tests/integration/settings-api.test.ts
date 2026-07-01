@@ -89,6 +89,7 @@ describe("settings API", () => {
     expect(body.settings.defaultCity).toBe("宁波");
     expect(body.settings.originLngLat).toBe("");
     expect(body.settings.routePreference).toBe("balanced");
+    expect(body.settings.routeChangeThresholdMinutes).toBe(3);
   });
 
   it("returns blank origin fields when the user has not selected a default origin", async () => {
@@ -176,7 +177,8 @@ describe("settings API", () => {
           originName: "家",
           originLngLat: "121.5230315924,29.8652491273",
           routePreference: "fastest",
-          emailRecipient: "user@example.com"
+          emailRecipient: "user@example.com",
+          routeChangeThresholdMinutes: 6
         })
       })
     );
@@ -185,6 +187,7 @@ describe("settings API", () => {
     expect(response.status).toBe(200);
     expect(body.settings.routePreference).toBe("fastest");
     expect(body.settings.emailRecipient).toBe("user@example.com");
+    expect(body.settings.routeChangeThresholdMinutes).toBe(6);
   });
 
   it("rejects saving a Telegram Chat ID that is already bound to another user", async () => {
@@ -264,7 +267,8 @@ describe("settings API", () => {
           timezone: "Mars/Base",
           originLngLat: "not-coordinates",
           routePreference: "teleport",
-          emailRecipient: "not-email"
+          emailRecipient: "not-email",
+          routeChangeThresholdMinutes: -1
         })
       })
     );
@@ -319,6 +323,9 @@ describe("settings API", () => {
     ["defaultCity", ""],
     ["timezone", ""],
     ["routePreference", ""],
+    ["routeChangeThresholdMinutes", 0],
+    ["routeChangeThresholdMinutes", 121],
+    ["routeChangeThresholdMinutes", "not-a-number"],
     ["timezone", 123],
     ["routePreference", {}]
   ])("returns 400 when %s is supplied as an invalid value", async (field, value) => {

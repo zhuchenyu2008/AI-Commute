@@ -8,6 +8,9 @@ const ROUTE_PREFERENCES = new Set(["balanced", "fastest", "habit", "transit", "b
 const TIMEZONES = new Set(["Asia/Shanghai"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LNG_LAT_PATTERN = /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/;
+const DEFAULT_ROUTE_CHANGE_THRESHOLD_MINUTES = 3;
+const MIN_ROUTE_CHANGE_THRESHOLD_MINUTES = 1;
+const MAX_ROUTE_CHANGE_THRESHOLD_MINUTES = 120;
 const TELEGRAM_CHAT_ID_CONFLICT_DETAIL =
   "Telegram Chat ID 已被其他用户绑定，请使用自己的 Chat ID 或先解除原绑定。";
 
@@ -21,6 +24,7 @@ function getSettingsDefaults() {
     routePreference: "balanced",
     telegramChatId: null,
     emailRecipient: null,
+    routeChangeThresholdMinutes: DEFAULT_ROUTE_CHANGE_THRESHOLD_MINUTES,
   };
 }
 
@@ -45,6 +49,21 @@ function readRequiredString(body: Record<string, unknown>, key: string, fallback
   return asOptionalString(body[key]) ?? "";
 }
 
+function readRouteChangeThresholdMinutes(
+  body: Record<string, unknown>,
+  fallback: number
+) {
+  if (!Object.prototype.hasOwnProperty.call(body, "routeChangeThresholdMinutes")) {
+    return fallback;
+  }
+
+  const raw = body.routeChangeThresholdMinutes;
+  const numeric =
+    typeof raw === "number" || typeof raw === "string" ? Number(raw) : NaN;
+
+  return Number.isFinite(numeric) ? Math.round(numeric) : NaN;
+}
+
 function isValidLngLat(value: string) {
   if (!LNG_LAT_PATTERN.test(value)) return false;
   const [lng, lat] = value.split(",").map(Number);
@@ -59,6 +78,7 @@ function validateSettings(data: {
   routePreference: string;
   telegramChatId: string | null;
   emailRecipient: string | null;
+  routeChangeThresholdMinutes: number;
 }) {
   const errors: string[] = [];
 
@@ -75,6 +95,13 @@ function validateSettings(data: {
   }
   if (data.emailRecipient && !EMAIL_PATTERN.test(data.emailRecipient)) {
     errors.push("邮件接收人格式无效");
+  }
+  if (
+    !Number.isInteger(data.routeChangeThresholdMinutes) ||
+    data.routeChangeThresholdMinutes < MIN_ROUTE_CHANGE_THRESHOLD_MINUTES ||
+    data.routeChangeThresholdMinutes > MAX_ROUTE_CHANGE_THRESHOLD_MINUTES
+  ) {
+    errors.push("路线变化提醒阈值必须是 1 到 120 分钟之间的整数");
   }
 
   return errors;
@@ -133,6 +160,10 @@ export async function PUT(request: Request) {
     routePreference: readRequiredString(body, "routePreference", defaults.routePreference),
     telegramChatId: asOptionalString(body.telegramChatId) ?? null,
     emailRecipient: asOptionalString(body.emailRecipient) ?? null,
+    routeChangeThresholdMinutes: readRouteChangeThresholdMinutes(
+      body,
+      defaults.routeChangeThresholdMinutes
+    ),
   };
   const errors = validateSettings(data);
 

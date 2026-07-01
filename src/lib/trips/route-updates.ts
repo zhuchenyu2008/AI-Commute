@@ -71,6 +71,7 @@ export type ReplaceReminderScheduleInput = {
   legId?: string;
   legOrder?: number;
   cadenceMinutes?: readonly number[];
+  now?: Date;
 };
 
 type PersistedStopForRoute = {
@@ -261,7 +262,9 @@ export async function replaceTripRoute(input: ReplaceTripRouteInput) {
       destinationName: finalStopName,
     });
 
-    await tx.reminderJob.deleteMany({ where: { tripId: trip.id } });
+    await tx.reminderJob.deleteMany({
+      where: { tripId: trip.id, status: "scheduled" },
+    });
     await tx.bufferComponent.deleteMany({ where: { leg: { tripId: trip.id } } });
     await tx.routeSegment.deleteMany({ where: { leg: { tripId: trip.id } } });
     await tx.routeCandidate.deleteMany({ where: { leg: { tripId: trip.id } } });
@@ -528,6 +531,7 @@ export async function replaceReminderSchedule(input: ReplaceReminderScheduleInpu
     await tx.reminderJob.deleteMany({
       where: {
         tripId: input.tripId,
+        status: "scheduled",
         ...(input.legId || input.legOrder !== undefined
           ? { legId: legs[0]?.id }
           : {}),
@@ -542,6 +546,7 @@ export async function replaceReminderSchedule(input: ReplaceReminderScheduleInpu
           legId: leg.id,
           latestDepartAt: leg.latestDepartAt,
           cadenceMinutes,
+          now: input.now,
         }),
       });
     }
