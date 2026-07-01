@@ -634,19 +634,67 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain("block");
   });
 
-  it("submits the history date filter when the user selects a day", () => {
+  it("renders a custom history date trigger instead of a native date input", () => {
+    const { container } = render(<HistoryDateFilter value="2026-06-30" />);
+
+    expect(container.querySelector('input[type="date"]')).toBeNull();
+    expect(container.querySelector('input[name="date"]')?.getAttribute("type")).toBe(
+      "hidden"
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "查看日期 2026年6月30日" })
+    );
+
+    expect(screen.getByRole("dialog", { name: "选择历史日期" })).toBeTruthy();
+    expect(screen.getByText("2026年6月")).toBeTruthy();
+  });
+
+  it("navigates the visible month in the custom history calendar", () => {
+    render(<HistoryDateFilter value="2026-06-30" />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "查看日期 2026年6月30日" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "上个月" }));
+
+    expect(screen.getByText("2026年5月")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "下个月" }));
+
+    expect(screen.getByText("2026年6月")).toBeTruthy();
+  });
+
+  it("syncs the custom history date trigger when the server value changes", () => {
+    const { rerender } = render(<HistoryDateFilter value="2026-06-30" />);
+
+    rerender(<HistoryDateFilter value="2026-06-29" />);
+
+    expect(
+      screen.getByRole("button", { name: "查看日期 2026年6月29日" })
+    ).toBeTruthy();
+  });
+
+  it("submits the history date filter when the user picks a calendar day", () => {
     const originalRequestSubmit = HTMLFormElement.prototype.requestSubmit;
     const requestSubmit = vi.fn();
     HTMLFormElement.prototype.requestSubmit = requestSubmit;
 
     try {
-      render(<HistoryDateFilter value="2026-06-30" />);
+      const { container } = render(<HistoryDateFilter value="2026-06-30" />);
 
-      fireEvent.change(screen.getByLabelText("查看日期"), {
-        target: { value: "2026-06-29" },
-      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "查看日期 2026年6月30日" })
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "选择 2026年6月29日" })
+      );
 
+      expect(
+        (container.querySelector('input[name="date"]') as HTMLInputElement).value
+      ).toBe("2026-06-29");
       expect(requestSubmit).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("dialog", { name: "选择历史日期" })).toBeNull();
     } finally {
       HTMLFormElement.prototype.requestSubmit = originalRequestSubmit;
     }
