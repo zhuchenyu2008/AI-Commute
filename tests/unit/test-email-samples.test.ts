@@ -60,6 +60,12 @@ describe("template test email recipient selection", () => {
   it("does not limit recipient lookup to the latest 10 settings", () => {
     expect(buildTemplateEmailRecipientQuery()).not.toHaveProperty("take");
   });
+
+  it("only selects emailRecipient for recipient lookup", () => {
+    expect(buildTemplateEmailRecipientQuery()).toHaveProperty("select", {
+      emailRecipient: true,
+    });
+  });
 });
 
 describe("template test email sending", () => {
@@ -102,6 +108,47 @@ describe("template test email sending", () => {
 
     expect(sendEmail).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledTimes(2);
+  });
+
+  it("records a rejected send as failed and still attempts the next email", async () => {
+    const emails = [
+      {
+        label: "到点提醒" as const,
+        subject: "first",
+        text: "first text",
+        html: "<p>first</p>",
+      },
+      {
+        label: "时间更新" as const,
+        subject: "second",
+        text: "second text",
+        html: "<p>second</p>",
+      },
+    ];
+    const sendEmail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("smtp socket closed"))
+      .mockResolvedValueOnce({
+        status: "sent",
+        recipient: "commuter@example.com",
+      });
+    const log = vi.fn();
+
+    await expect(
+      sendTemplateTestEmails({
+        recipient: "commuter@example.com",
+        emails,
+        sendEmail,
+        log,
+      })
+    ).rejects.toThrow("到点提醒测试邮件未发送成功：smtp socket closed");
+
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenNthCalledWith(
+      1,
+      "[到点提醒] failed -> commuter@example.com (smtp socket closed)"
+    );
   });
 });
 

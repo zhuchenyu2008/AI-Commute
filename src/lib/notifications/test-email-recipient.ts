@@ -6,6 +6,7 @@ export function buildTemplateEmailRecipientQuery() {
       emailRecipient: { not: null },
     },
     orderBy: { updatedAt: "desc" },
+    select: { emailRecipient: true },
   } satisfies Prisma.UserSettingsFindManyArgs;
 }
 

@@ -24,6 +24,12 @@ export async function sendTemplateTestEmails({
       subject: `[测试] ${email.subject}`,
       text: email.text,
       html: email.html,
+    }).catch((error: unknown): NotificationSendResult => {
+      return {
+        status: "failed",
+        recipient,
+        error: error instanceof Error ? error.message : String(error),
+      };
     });
 
     log(
