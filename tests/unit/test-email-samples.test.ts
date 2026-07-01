@@ -66,6 +66,32 @@ describe("template test emails", () => {
       "查看实时地图：https://uri.amap.com/search"
     );
   });
+
+  it("builds only the departure reminder mock email when requested", () => {
+    const emails = buildTemplateTestEmails({
+      kind: "departure-reminder",
+      now: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    expect(emails).toHaveLength(1);
+    expect(emails[0]).toMatchObject({
+      label: "到点提醒",
+      subject: "通勤提醒：该出发了",
+    });
+  });
+
+  it("builds only the route-change mock email when requested", () => {
+    const emails = buildTemplateTestEmails({
+      kind: "route-change",
+      now: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    expect(emails).toHaveLength(1);
+    expect(emails[0]).toMatchObject({
+      label: "时间更新",
+      subject: "通勤时间已变化：测试通勤路线",
+    });
+  });
 });
 
 describe("template test email recipient selection", () => {
@@ -206,5 +232,29 @@ describe("send test emails script environment loading", () => {
     expect(loadEnvIndex).toBeGreaterThanOrEqual(0);
     expect(dbImportIndex).toBeGreaterThanOrEqual(0);
     expect(loadEnvIndex).toBeLessThan(dbImportIndex);
+  });
+
+  it("exposes separate commands for each mock email reminder", () => {
+    const pkg = JSON.parse(
+      readFileSync(join(process.cwd(), "package.json"), "utf8")
+    ) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["email:test-departure-reminder"]).toBe(
+      "tsx scripts/send-test-emails.ts departure-reminder"
+    );
+    expect(pkg.scripts["email:test-route-change"]).toBe(
+      "tsx scripts/send-test-emails.ts route-change"
+    );
+  });
+
+  it("passes the requested mock email kind from the script argument", () => {
+    const source = readFileSync(
+      join(process.cwd(), "scripts/send-test-emails.ts"),
+      "utf8"
+    );
+
+    expect(source).toContain("process.argv[2]");
+    expect(source).toContain("buildTemplateTestEmails({");
+    expect(source).toContain("kind:");
   });
 });

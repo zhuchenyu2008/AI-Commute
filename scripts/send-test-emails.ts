@@ -2,7 +2,25 @@ import { loadEnvConfig } from "@next/env";
 
 loadEnvConfig(process.cwd());
 
+type TemplateTestEmailKind = "departure-reminder" | "route-change";
+
 let disconnectPrisma: (() => Promise<void>) | null = null;
+
+function parseTemplateEmailKind(
+  value: string | undefined
+): TemplateTestEmailKind | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (value === "departure-reminder" || value === "route-change") {
+    return value;
+  }
+
+  throw new Error(
+    `未知测试邮件类型：${value}。可用类型：departure-reminder、route-change。`
+  );
+}
 
 async function main() {
   const { prisma } = await import("@/lib/db");
@@ -30,7 +48,9 @@ async function main() {
     throw new Error("没有找到已配置的邮件接收人 emailRecipient。");
   }
 
-  const emails = buildTemplateTestEmails();
+  const emails = buildTemplateTestEmails({
+    kind: parseTemplateEmailKind(process.argv[2]),
+  });
 
   await sendTemplateTestEmails({
     recipient,

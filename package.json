@@ -17,6 +17,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "scheduler:tick": "tsx scripts/scheduler.ts",
     "email:test-templates": "tsx scripts/send-test-emails.ts",
+    "email:test-departure-reminder": "tsx scripts/send-test-emails.ts departure-reminder",
+    "email:test-route-change": "tsx scripts/send-test-emails.ts route-change",
     "telegram:poll": "tsx scripts/telegram-poll.ts"
   },
   "dependencies": {

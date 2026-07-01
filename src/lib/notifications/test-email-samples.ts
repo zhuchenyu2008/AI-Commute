@@ -5,13 +5,17 @@ import {
 } from "@/lib/notifications/email-templates";
 import { buildAmapLink } from "@/lib/notifications/map-links";
 
+export type TemplateTestEmailKind = "departure-reminder" | "route-change";
+
 export type TemplateTestEmail = BuiltEmailTemplate & {
   label: "到点提醒" | "时间更新";
 };
 
 export function buildTemplateTestEmails({
+  kind,
   now = new Date(),
 }: {
+  kind?: TemplateTestEmailKind;
   now?: Date;
 } = {}): TemplateTestEmail[] {
   const departAt0830 = beijingClockTime(now, 8, 30);
@@ -50,19 +54,27 @@ export function buildTemplateTestEmails({
     stopMonitoringUrl: undefined,
   };
 
-  return [
-    {
-      label: "到点提醒",
-      ...buildDepartureReminderEmail(departureInput),
-    },
-    {
-      label: "时间更新",
-      ...buildRouteChangeEmail({
-        ...routeChangeInput,
-        changeMinutes: 5,
-      }),
-    },
-  ];
+  const departureEmail: TemplateTestEmail = {
+    label: "到点提醒",
+    ...buildDepartureReminderEmail(departureInput),
+  };
+  const routeChangeEmail: TemplateTestEmail = {
+    label: "时间更新",
+    ...buildRouteChangeEmail({
+      ...routeChangeInput,
+      changeMinutes: 5,
+    }),
+  };
+
+  if (kind === "departure-reminder") {
+    return [departureEmail];
+  }
+
+  if (kind === "route-change") {
+    return [routeChangeEmail];
+  }
+
+  return [departureEmail, routeChangeEmail];
 }
 
 function beijingClockTime(base: Date, hour: number, minute: number) {

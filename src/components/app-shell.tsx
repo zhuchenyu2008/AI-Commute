@@ -1,7 +1,8 @@
 import React from "react";
-import Link from "next/link";
 import { MapPin } from "lucide-react";
 import { BottomNav, type NavKey } from "@/components/bottom-nav";
+import { PageTransitionReady } from "@/components/page-transition-ready";
+import { RouteTransitionLink } from "@/components/route-transition-link";
 
 const desktopItems = [
   { key: "home", href: "/", label: "首页" },
@@ -10,6 +11,13 @@ const desktopItems = [
   { key: "settings", href: "/settings", label: "设置" },
 ] as const;
 
+const activeRouteHrefs: Record<NavKey, string> = {
+  history: "/history",
+  home: "/",
+  memories: "/memories",
+  settings: "/settings",
+};
+
 export function AppShell({
   active,
   children,
@@ -17,6 +25,8 @@ export function AppShell({
   active: NavKey;
   children: React.ReactNode;
 }) {
+  const activeIndex = desktopItems.findIndex((item) => item.key === active);
+
   return (
     <div className="relative min-h-dvh overflow-hidden bg-[#f7f9fb] text-[#191c1e]">
       <div className="pointer-events-none fixed inset-0 opacity-70">
@@ -27,29 +37,45 @@ export function AppShell({
 
       <header className="fixed inset-x-0 top-0 z-40 hidden border-b border-white/60 bg-white/70 backdrop-blur-md md:block">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link className="flex items-center gap-2 font-bold text-[#191c1e]" href="/">
+          <RouteTransitionLink
+            className="flex items-center gap-2 font-bold text-[#191c1e]"
+            href="/"
+          >
             <MapPin aria-hidden="true" className="size-5 text-[#2563eb]" />
             <span>通勤规划助手</span>
-          </Link>
-          <nav aria-label="桌面导航" className="flex items-center gap-7">
+          </RouteTransitionLink>
+          <nav
+            aria-label="桌面导航"
+            className="desktop-nav-motion relative grid w-[17rem] grid-cols-4"
+            style={
+              {
+                "--active-index": activeIndex,
+              } as React.CSSProperties
+            }
+          >
+            <span aria-hidden="true" className="desktop-nav-underline" />
             {desktopItems.map((item) => (
-              <Link
-                className={`border-b-2 pb-1 text-sm font-semibold transition ${
+              <RouteTransitionLink
+                className={`relative z-10 px-3 pb-1 text-center text-sm font-semibold transition ${
                   active === item.key
-                    ? "border-[#2563eb] text-[#2563eb]"
-                    : "border-transparent text-[#434655] hover:text-[#2563eb]"
+                    ? "text-[#2563eb]"
+                    : "text-[#434655] hover:text-[#2563eb]"
                 }`}
                 href={item.href}
                 key={item.key}
               >
                 {item.label}
-              </Link>
+              </RouteTransitionLink>
             ))}
           </nav>
         </div>
       </header>
 
-      <main className="page-enter relative z-10 mx-auto w-full max-w-6xl px-5 pb-[104px] pt-8 md:px-6 md:pb-12 md:pt-24">
+      <main
+        className="page-enter page-transition-surface relative z-10 mx-auto w-full max-w-6xl overflow-hidden px-5 pb-[104px] pt-8 md:px-6 md:pb-12 md:pt-24"
+        data-page-route={active}
+      >
+        <PageTransitionReady route={activeRouteHrefs[active]} />
         {children}
       </main>
       <BottomNav active={active} />

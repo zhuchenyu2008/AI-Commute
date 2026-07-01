@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -34,6 +36,7 @@ const { completeRouteViewTransitionMock, routerPushMock } = vi.hoisted(() => ({
 const REDIRECT_DELAY_FOR_TESTS_MS = 1300;
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
   useRouter: () => ({
     push: routerPushMock,
   }),
@@ -81,6 +84,8 @@ describe("sample-aligned UI components", () => {
     );
 
     expect(html).toContain("page-enter");
+    expect(html).toContain("page-transition-surface");
+    expect(html).toContain("data-page-route=\"home\"");
   });
 
   it("marks active bottom navigation items for smooth state motion", () => {
@@ -88,6 +93,69 @@ describe("sample-aligned UI components", () => {
 
     expect(html).toContain("nav-item-motion");
     expect(html).toContain("nav-item-active");
+    expect(html).toContain("nav-active-pill");
+    expect(html).toContain("--active-index:1");
+  });
+
+  it("keeps bottom navigation above page transitions without morphing the active pill", () => {
+    const html = renderToStaticMarkup(<BottomNav active="settings" />);
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+
+    expect(html).toContain("bottom-nav-transition-layer");
+    expect(css).toMatch(
+      /\.bottom-nav-transition-layer\s*\{[^}]*view-transition-name:\s*route-bottom-nav;/s
+    );
+    expect(css).not.toContain("route-nav-active-pill");
+    expect(css).not.toContain("--route-page-bottom-clearance");
+    expect(css).not.toMatch(/:root\s*\{[^}]*view-transition-name:\s*none;/s);
+    expect(css).toMatch(
+      /::view-transition-group\(route-bottom-nav\)\s*\{[^}]*z-index:\s*2;/s
+    );
+    expect(css).toMatch(
+      /::view-transition-old\(route-bottom-nav\)\s*\{[^}]*animation:\s*none;[^}]*opacity:\s*0;/s
+    );
+    expect(css).toMatch(
+      /::view-transition-new\(route-bottom-nav\)\s*\{[^}]*animation:\s*none;[^}]*opacity:\s*1;/s
+    );
+  });
+
+  it("raises the bottom navigation active pill by one pixel", () => {
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+
+    expect(css).toMatch(
+      /\.nav-active-pill\s*\{[^}]*top:\s*calc\(0\.25rem - 1px\);[^}]*bottom:\s*calc\(0\.25rem \+ 1px\);/s
+    );
+  });
+
+  it("keeps compact page transitions fast enough to avoid heavy ghosting", () => {
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+
+    expect(css).toMatch(
+      /::view-transition-old\(route-page\)\s*\{[^}]*animation-duration:\s*80ms;/s
+    );
+    expect(css).toMatch(
+      /::view-transition-new\(route-page\)\s*\{[^}]*animation-delay:\s*20ms;[^}]*animation-duration:\s*180ms;/s
+    );
+  });
+
+  it("routes bottom navigation through the shared page transition", () => {
+    render(<BottomNav active="home" />);
+
+    fireEvent.click(screen.getByRole("link", { name: "历史" }));
+
+    expect(routerPushMock).toHaveBeenCalledWith("/history");
+  });
+
+  it("marks desktop navigation for underline sliding motion", () => {
+    const html = renderToStaticMarkup(
+      <AppShell active="memories">
+        <div>Content</div>
+      </AppShell>
+    );
+
+    expect(html).toContain("desktop-nav-motion");
+    expect(html).toContain("desktop-nav-underline");
+    expect(html).toContain("--active-index:2");
   });
 
   it("renders buffer items with weather as zero-minute context", () => {

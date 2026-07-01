@@ -3,7 +3,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AGENT_TRANSITION_PROMPT_KEY,
+  ROUTE_TRANSITION_DIRECTION_KEY,
+  completePageRouteViewTransition,
   completeRouteViewTransition,
+  getRouteTransitionDirection,
   savePendingAgentPrompt,
   startRouteViewTransition,
   takePendingAgentPrompt,
@@ -104,12 +107,31 @@ describe("agent transition helpers", () => {
     expect(takePrompt("session-2")).toBe("office");
   });
 
+  it("calculates compact cross-slide direction from nav route order", () => {
+    expect(getRouteTransitionDirection("/", "/history")).toBe("forward");
+    expect(getRouteTransitionDirection("/history", "/memories")).toBe(
+      "forward"
+    );
+    expect(getRouteTransitionDirection("/settings", "/history")).toBe("back");
+    expect(getRouteTransitionDirection("/history", "/")).toBe("back");
+    expect(getRouteTransitionDirection("/history", "/history")).toBe(
+      "neutral"
+    );
+  });
+
   it("calls navigate directly when View Transitions are unavailable", () => {
     const navigate = vi.fn();
 
-    startRouteViewTransition(navigate);
+    startRouteViewTransition(navigate, {
+      direction: "back",
+      targetRoute: "/history",
+    });
 
     expect(navigate).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.dataset.routeTransitionDirection).toBe(
+      "back"
+    );
+    expect(sessionStorage.getItem(ROUTE_TRANSITION_DIRECTION_KEY)).toBe("back");
   });
 
   it("does not start a View Transition when reduced motion is preferred", () => {
@@ -134,10 +156,13 @@ describe("agent transition helpers", () => {
       }))
     );
 
-    startRouteViewTransition(navigate);
+    startRouteViewTransition(navigate, { direction: "forward" });
 
     expect(startViewTransition).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.dataset.routeTransitionDirection).toBe(
+      "forward"
+    );
   });
 
   it("continues navigation when checking reduced motion throws", () => {
@@ -247,6 +272,41 @@ describe("agent transition helpers", () => {
     expect(resolved).toBe(false);
 
     vi.advanceTimersByTime(1);
+    await pending;
+
+    expect(resolved).toBe(true);
+  });
+
+  it("keeps compact page transitions pending until the target route is ready", async () => {
+    const navigate = vi.fn();
+    let updateResult: void | Promise<void>;
+    const startViewTransition = vi.fn(
+      (callback: () => void | Promise<void>) => {
+        updateResult = callback();
+        return {};
+      }
+    );
+    (document as unknown as TestViewTransitionDocument).startViewTransition =
+      startViewTransition;
+
+    startRouteViewTransition(navigate, {
+      completion: "next-page",
+      direction: "forward",
+      targetRoute: "/history",
+    });
+
+    let resolved = false;
+    const pending = (updateResult! as Promise<void>).then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+    completePageRouteViewTransition("/");
+    await Promise.resolve();
+
+    expect(resolved).toBe(false);
+
+    completePageRouteViewTransition("/history");
     await pending;
 
     expect(resolved).toBe(true);
