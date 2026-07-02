@@ -2,7 +2,7 @@
 
 import React, { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Mic, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import {
   savePendingAgentPrompt,
   startRouteViewTransition,
@@ -96,18 +96,11 @@ export function CommuteInput() {
         />
         <input
           aria-label="搜索目的地"
-          className="h-16 w-full rounded-full border-0 bg-[#f2f4f6] px-12 pr-28 text-lg text-[#191c1e] shadow-sm outline-none ring-[#2563eb]/20 transition placeholder:text-[#737686] focus:bg-white focus:ring-4"
+          className="h-16 w-full rounded-full border-0 bg-[#f2f4f6] px-12 pr-20 text-lg text-[#191c1e] shadow-sm outline-none ring-[#2563eb]/20 transition placeholder:text-[#737686] focus:bg-white focus:ring-4"
           onChange={(event) => setPrompt(event.target.value)}
           placeholder="你要去哪，几点到？"
           value={prompt}
         />
-        <button
-          aria-label="语音输入"
-          className="absolute right-16 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full text-[#2563eb] transition hover:bg-[#dbe1ff]"
-          type="button"
-        >
-          <Mic aria-hidden="true" className="size-5" />
-        </button>
         <button
           className="absolute right-2 top-1/2 flex h-12 min-w-12 -translate-y-1/2 items-center justify-center rounded-full bg-[#2563eb] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isSubmitting}

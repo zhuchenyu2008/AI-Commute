@@ -288,9 +288,6 @@ export default async function TripDetailPage({ params }: TripPageProps) {
             <ShieldCheck aria-hidden="true" className="size-5 text-[#2563eb]" />
             <h2 className="text-lg font-bold text-[#191c1e]">缓冲时间</h2>
           </div>
-          <p className="mt-1 text-sm text-[#434655]">
-            天气会作为路线选择和缓冲时间的参考；若智能体明确预留天气余量，会计入总时间。
-          </p>
           <div className="mt-4">
             <BufferList buffers={buffers} />
           </div>

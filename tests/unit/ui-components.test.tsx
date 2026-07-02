@@ -436,6 +436,12 @@ describe("sample-aligned UI components", () => {
     expect(screen.getByRole("button", { name: "规划" })).toBeTruthy();
   });
 
+  it("keeps the home voice input control hidden", () => {
+    render(<CommuteInput />);
+
+    expect(screen.queryByRole("button", { name: "语音输入" })).toBeNull();
+  });
+
   it("stores the prompt before routing from home to agent", async () => {
     const fetchMock = vi.fn(async () =>
       Response.json(
