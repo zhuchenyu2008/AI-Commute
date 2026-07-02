@@ -236,13 +236,14 @@ async function createTelegramUser(label: string, chatId: string) {
 
 async function createTrip(userId: string, title: string, status: string) {
   const destination = title.split("-").at(-1) ?? title;
+  const targetArriveAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const trip = await createPlannedTrip({
     userId,
     rawPrompt: title,
     timezone: "Asia/Shanghai",
     title,
     finalStopName: destination,
-    targetArriveAt: new Date("2026-07-01T01:00:00.000Z"),
+    targetArriveAt,
     stops: [{ order: 1, name: destination }],
     legs: [
       {

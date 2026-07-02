@@ -1,7 +1,7 @@
-export const AGENT_TRANSITION_PROMPT_KEY = "commute-planner:agent-prompt";
-export const AGENT_TRANSITION_SESSION_KEY = "commute-planner:agent-session";
+export const AGENT_TRANSITION_PROMPT_KEY = "ai-commute:agent-prompt";
+export const AGENT_TRANSITION_SESSION_KEY = "ai-commute:agent-session";
 export const ROUTE_TRANSITION_DIRECTION_KEY =
-  "commute-planner:route-transition-direction";
+  "ai-commute:route-transition-direction";
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void | Promise<void>) => unknown;
@@ -44,7 +44,7 @@ function resolvePendingRouteTransition() {
 
 function normalizeRoutePath(route: string): string {
   try {
-    const url = new URL(route, "https://commute-planner.local");
+    const url = new URL(route, "https://ai-commute.local");
     const pathname = url.pathname.replace(/\/+$/, "");
 
     return pathname || "/";

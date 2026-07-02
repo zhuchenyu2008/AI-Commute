@@ -22,6 +22,7 @@ import { CurrentLocationLabel } from "@/components/home/current-location-label";
 import { BufferList } from "@/components/trips/buffer-list";
 import { RouteTimeline } from "@/components/trips/route-timeline";
 import { LoginForm } from "@app/login/login-form";
+import SettingsPage from "@app/settings/page";
 import { SettingsForm } from "@app/settings/settings-form";
 import {
   formatMonitoredDuration,
@@ -33,6 +34,16 @@ const { completeRouteViewTransitionMock, routerPushMock } = vi.hoisted(() => ({
   routerPushMock: vi.fn(),
 }));
 
+const {
+  getCurrentUserMock,
+  prismaUserSettingsFindUniqueMock,
+  readEnvMock,
+} = vi.hoisted(() => ({
+  getCurrentUserMock: vi.fn(),
+  prismaUserSettingsFindUniqueMock: vi.fn(),
+  readEnvMock: vi.fn(),
+}));
+
 const REDIRECT_DELAY_FOR_TESTS_MS = 1300;
 
 vi.mock("next/navigation", () => ({
@@ -40,6 +51,25 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: routerPushMock,
   }),
+  redirect: vi.fn((path: string) => {
+    throw new Error(`redirect:${path}`);
+  }),
+}));
+
+vi.mock("@/lib/auth/session", () => ({
+  getCurrentUser: getCurrentUserMock,
+}));
+
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    userSettings: {
+      findUnique: prismaUserSettingsFindUniqueMock,
+    },
+  },
+}));
+
+vi.mock("@/lib/env", () => ({
+  readEnv: readEnvMock,
 }));
 
 vi.mock("@/lib/ui/agent-transition", async (importOriginal) => {
@@ -61,6 +91,9 @@ describe("sample-aligned UI components", () => {
     vi.restoreAllMocks();
     completeRouteViewTransitionMock.mockReset();
     routerPushMock.mockReset();
+    getCurrentUserMock.mockReset();
+    prismaUserSettingsFindUniqueMock.mockReset();
+    readEnvMock.mockReset();
   });
 
   it("renders BottomNav labels and navigation aria labels", () => {
@@ -421,10 +454,10 @@ describe("sample-aligned UI components", () => {
       expect(routerPushMock).toHaveBeenCalledWith("/agent/session-1");
     });
     expect(
-      window.sessionStorage.getItem("commute-planner:agent-prompt")
+      window.sessionStorage.getItem("ai-commute:agent-prompt")
     ).toBe("Go to the office by 9");
     expect(
-      window.sessionStorage.getItem("commute-planner:agent-session")
+      window.sessionStorage.getItem("ai-commute:agent-session")
     ).toBe("session-1");
   });
 
@@ -450,7 +483,7 @@ describe("sample-aligned UI components", () => {
       expect(routerPushMock).toHaveBeenCalledWith("/login");
     });
     expect(
-      window.sessionStorage.getItem("commute-planner:agent-prompt")
+      window.sessionStorage.getItem("ai-commute:agent-prompt")
     ).toBeNull();
   });
 
@@ -579,7 +612,7 @@ describe("sample-aligned UI components", () => {
 
   it("renders the initial prompt as a user message bubble on the agent page", async () => {
     const prompt = "Go to the office by 9";
-    window.sessionStorage.setItem("commute-planner:agent-prompt", prompt);
+    window.sessionStorage.setItem("ai-commute:agent-prompt", prompt);
     const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
       if (String(url) === "/api/agent-sessions/session-1") {
         return Response.json({
@@ -621,7 +654,7 @@ describe("sample-aligned UI components", () => {
 
   it("completes the route view transition after the target user bubble is rendered", async () => {
     const prompt = "Go to the office by 9";
-    window.sessionStorage.setItem("commute-planner:agent-prompt", prompt);
+    window.sessionStorage.setItem("ai-commute:agent-prompt", prompt);
     const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
       if (String(url) === "/api/agent-sessions/session-1") {
         return Response.json({
@@ -658,7 +691,7 @@ describe("sample-aligned UI components", () => {
 
   it("marks only the first duplicate user message as the agent transition target", async () => {
     const prompt = "Go to the office by 9";
-    window.sessionStorage.setItem("commute-planner:agent-prompt", prompt);
+    window.sessionStorage.setItem("ai-commute:agent-prompt", prompt);
     const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
       if (String(url) === "/api/agent-sessions/session-1") {
         return Response.json({
@@ -843,6 +876,25 @@ describe("sample-aligned UI components", () => {
 
     expect(html).toContain("fonts.googleapis.com");
     expect(html).toContain("family=Inter");
+  });
+
+  it("renders project attribution and repository link on settings page", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: "user-1", email: "user@example.com" });
+    prismaUserSettingsFindUniqueMock.mockResolvedValue(null);
+    readEnvMock.mockReturnValue({
+      defaultCity: "宁波",
+      defaultTimezone: "Asia/Shanghai",
+    });
+
+    const page = await SettingsPage();
+    const html = renderToStaticMarkup(page);
+
+    expect(html).toContain("AI Commute");
+    expect(html).toContain("ZhuChenyu");
+    expect(html).toContain("GitHub");
+    expect(html).toContain(
+      'href="https://github.com/zhuchenyu2008/Commute-Planner"'
+    );
   });
 
   it("renders login and settings form controls with visible field frames", () => {

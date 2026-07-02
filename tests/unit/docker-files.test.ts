@@ -26,9 +26,14 @@ describe("Docker configuration", () => {
   it("documents local and docker operation commands", () => {
     const readme = readFileSync("README.md", "utf8");
 
-    expect(readme).toContain("# 通勤规划助手");
+    expect(readme).toContain("# AI Commute");
     expect(readme).toContain("## 本地开发");
     expect(readme).toContain("## Docker");
+    expect(readme).toContain("## 界面截图");
+    expect(readme).toContain("output/readme-assets/home.png");
+    expect(readme).toContain("output/readme-assets/settings.png");
+    expect(readme).toContain("output/readme-assets/departure-reminder-mobile.png");
+    expect(readme).toContain("output/readme-assets/route-change-mobile.png");
     expect(readme).toContain("npm run dev");
     expect(readme).toContain("docker compose up --build");
     expect(readme).toContain("npm run scheduler:tick");

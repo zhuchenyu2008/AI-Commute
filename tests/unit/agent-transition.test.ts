@@ -91,12 +91,12 @@ describe("agent transition helpers", () => {
     savePrompt("office", "session-1");
 
     expect(sessionStorage.getItem(AGENT_TRANSITION_PROMPT_KEY)).toBe("office");
-    expect(sessionStorage.getItem("commute-planner:agent-session")).toBe(
+    expect(sessionStorage.getItem("ai-commute:agent-session")).toBe(
       "session-1"
     );
     expect(takePrompt("session-2")).toBe("");
     expect(sessionStorage.getItem(AGENT_TRANSITION_PROMPT_KEY)).toBeNull();
-    expect(sessionStorage.getItem("commute-planner:agent-session")).toBeNull();
+    expect(sessionStorage.getItem("ai-commute:agent-session")).toBeNull();
   });
 
   it("keeps legacy pending prompts available when no session id was stored", () => {

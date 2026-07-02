@@ -1,10 +1,11 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import React from "react";
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/project";
 
 export const metadata: Metadata = {
-  title: "通勤规划助手",
-  description: "面向个人通勤场景的智能出行规划工具"
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -4,6 +4,7 @@ import {
   formatReminderStatus,
   getMonitoringStatusDisplay,
 } from "@/lib/trips/monitoring";
+import { APP_NAME } from "@/lib/project";
 
 export type TelegramTripSummary = {
   title: string;
@@ -261,7 +262,7 @@ export function formatBoundHelpMessage(input: { hasActiveTrip: boolean }) {
     : "当前没有绑定行程，发送 /new 加出行需求即可开始。";
 
   return [
-    "通勤规划助手已连接。",
+    `${APP_NAME} 已连接。`,
     active,
     "可用命令：",
     "/new 明天九点到外事学校",

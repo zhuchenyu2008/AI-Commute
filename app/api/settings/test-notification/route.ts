@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { sendEmail } from "@/lib/notifications/email";
 import { sendTelegram } from "@/lib/notifications/telegram";
+import { APP_NAME } from "@/lib/project";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
 
     const result = await sendTelegram({
       chatId: telegramChatId,
-      text: "通勤规划助手测试消息：如果你收到这条消息，Telegram 通知已可用。",
+      text: `${APP_NAME} 测试消息：如果你收到这条消息，Telegram 通知已可用。`,
     });
 
     return NextResponse.json({ result });
@@ -56,8 +57,8 @@ export async function POST(request: Request) {
 
     const result = await sendEmail({
       to: emailRecipient,
-      subject: "通勤规划助手测试邮件",
-      text: "通勤规划助手测试邮件：如果你收到这封邮件，邮件通知已可用。",
+      subject: `${APP_NAME} 测试邮件`,
+      text: `${APP_NAME} 测试邮件：如果你收到这封邮件，邮件通知已可用。`,
     });
 
     return NextResponse.json({ result });

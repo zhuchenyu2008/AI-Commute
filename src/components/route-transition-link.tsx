@@ -51,7 +51,7 @@ export function RouteTransitionLink({
       (typeof window === "undefined" ? "/" : window.location.pathname);
     const targetUrl =
       typeof window === "undefined"
-        ? new URL(href, "https://commute-planner.local")
+        ? new URL(href, "https://ai-commute.local")
         : new URL(href, window.location.href);
 
     if (

@@ -3,6 +3,7 @@ import { MapPin } from "lucide-react";
 import { BottomNav, type NavKey } from "@/components/bottom-nav";
 import { PageTransitionReady } from "@/components/page-transition-ready";
 import { RouteTransitionLink } from "@/components/route-transition-link";
+import { APP_NAME } from "@/lib/project";
 
 const desktopItems = [
   { key: "home", href: "/", label: "首页" },
@@ -42,7 +43,7 @@ export function AppShell({
             href="/"
           >
             <MapPin aria-hidden="true" className="size-5 text-[#2563eb]" />
-            <span>通勤规划助手</span>
+            <span>{APP_NAME}</span>
           </RouteTransitionLink>
           <nav
             aria-label="桌面导航"

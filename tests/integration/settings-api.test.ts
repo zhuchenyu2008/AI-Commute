@@ -428,7 +428,7 @@ describe("settings API", () => {
     });
     expect(sendTelegramMock).toHaveBeenCalledWith({
       chatId: "telegram-chat",
-      text: expect.stringContaining("通勤规划助手测试消息"),
+      text: expect.stringContaining("AI Commute 测试消息"),
     });
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
@@ -499,8 +499,8 @@ describe("settings API", () => {
     });
     expect(sendEmailMock).toHaveBeenCalledWith({
       to: "user@example.com",
-      subject: "通勤规划助手测试邮件",
-      text: expect.stringContaining("通勤规划助手测试邮件"),
+      subject: "AI Commute 测试邮件",
+      text: expect.stringContaining("AI Commute 测试邮件"),
     });
     expect(sendTelegramMock).not.toHaveBeenCalled();
   });
