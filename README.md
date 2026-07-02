@@ -127,11 +127,11 @@ npm run telegram:poll
 docker compose up --build
 ```
 
-`migrate` 一次性服务会先执行 `npx prisma migrate deploy`。`web`、`scheduler` 和 `telegram` 都通过 `service_completed_successfully` 依赖它，确保 SQLite schema 在长驻服务启动前迁移完成。
+`migrate` 一次性服务会先执行 `npx prisma migrate deploy && npm run prisma:seed`。`web`、`scheduler` 和 `telegram` 都通过 `service_completed_successfully` 依赖它，确保 SQLite schema 和种子账号在长驻服务启动前准备完成。
 
 - `web`：运行 `npm run start`，暴露 `3000:3000`。
 - `scheduler`：每 60 秒执行一次 `npm run scheduler:tick`。
-- `telegram`：运行 `npm run telegram:poll`。
+- `telegram`：运行 `npm run telegram:poll`；`TELEGRAM_BOT_TOKEN` 为空时会跳过并退出，不会循环重启。
 - SQLite 数据持久化到宿主机 `./data`，容器内路径为 `/app/data`。
 
 ## 本机一键部署

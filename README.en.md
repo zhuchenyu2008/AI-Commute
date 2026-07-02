@@ -126,11 +126,11 @@ Run the web app, scheduler, and Telegram worker together:
 docker compose up --build
 ```
 
-The one-shot `migrate` service runs `npx prisma migrate deploy` first. `web`, `scheduler`, and `telegram` all depend on it with `service_completed_successfully`, so the SQLite schema is migrated before long-running services start.
+The one-shot `migrate` service runs `npx prisma migrate deploy && npm run prisma:seed` first. `web`, `scheduler`, and `telegram` all depend on it with `service_completed_successfully`, so the SQLite schema and seed account are ready before long-running services start.
 
 - `web`: runs `npm run start` and exposes `3000:3000`.
 - `scheduler`: runs `npm run scheduler:tick` every 60 seconds.
-- `telegram`: runs `npm run telegram:poll`.
+- `telegram`: runs `npm run telegram:poll`; when `TELEGRAM_BOT_TOKEN` is empty it skips and exits without restarting.
 - SQLite data is persisted to host path `./data`; the container path is `/app/data`.
 
 ## One-Command Local Startup

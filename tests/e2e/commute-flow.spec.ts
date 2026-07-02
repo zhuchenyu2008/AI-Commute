@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
 import type { prisma as PrismaInstance } from "../../src/lib/db";
+import { ensureTestDatabase } from "../integration/test-db";
 
 const email = "user@example.com";
 const password = "password";
@@ -9,16 +9,6 @@ const testOriginLngLat = "121.5230315924,29.8652491273";
 process.env.DATABASE_URL ??= "file:./e2e-test.db";
 
 let prisma: typeof PrismaInstance;
-
-function splitSqlStatements(sql: string) {
-  return sql
-    .split(/\r?\n/)
-    .filter((line) => !line.trim().startsWith("--"))
-    .join("\n")
-    .split(/;\s*(?:\r?\n|$)/)
-    .map((statement) => statement.trim())
-    .filter(Boolean);
-}
 
 test.beforeAll(async () => {
   const [{ hashPassword }, db, { readEnv }] = await Promise.all([
@@ -30,20 +20,7 @@ test.beforeAll(async () => {
   const env = readEnv();
   const passwordHash = await hashPassword(password);
 
-  const existing = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'User'"
-  );
-
-  if (existing.length === 0) {
-    const migration = readFileSync(
-      "prisma/migrations/20260628083500_init/migration.sql",
-      "utf8"
-    );
-
-    for (const statement of splitSqlStatements(migration)) {
-      await prisma.$executeRawUnsafe(statement);
-    }
-  }
+  await ensureTestDatabase();
 
   await prisma.user.upsert({
     where: { email },

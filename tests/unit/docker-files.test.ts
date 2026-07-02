@@ -64,7 +64,9 @@ describe("Docker configuration", () => {
     const telegramBlock = readComposeServiceBlock(compose, "telegram");
 
     expect(packageJson).toContain('"telegram:poll": "tsx scripts/telegram-poll.ts"');
-    expect(migrateBlock).toContain('command: sh -c "npx prisma migrate deploy"');
+    expect(migrateBlock).toContain(
+      'command: sh -c "npx prisma migrate deploy && npm run prisma:seed"'
+    );
     expect(migrateBlock).toContain("env_file:");
     expect(migrateBlock).toContain("- .env");
     expect(migrateBlock).toContain("DATABASE_URL: file:/app/data/commute.db");
@@ -89,7 +91,8 @@ describe("Docker configuration", () => {
     expect(telegramBlock).toContain("depends_on:");
     expect(telegramBlock).toContain("migrate:");
     expect(telegramBlock).toContain("condition: service_completed_successfully");
-    expect(telegramBlock).toContain("restart: unless-stopped");
+    expect(telegramBlock).toContain("restart: on-failure");
+    expect(telegramBlock).not.toContain("restart: unless-stopped");
     expect(readme).toContain("TELEGRAM_BOT_TOKEN");
     expect(readme).toContain("npm run telegram:poll");
     expect(readme).toContain("migrate");

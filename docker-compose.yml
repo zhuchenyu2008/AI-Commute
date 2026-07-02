@@ -1,7 +1,7 @@
 services:
   migrate:
     build: .
-    command: sh -c "npx prisma migrate deploy"
+    command: sh -c "npx prisma migrate deploy && npm run prisma:seed"
     env_file:
       - .env
     environment:
@@ -41,7 +41,7 @@ services:
   telegram:
     build: .
     command: sh -c "npm run telegram:poll"
-    restart: unless-stopped
+    restart: on-failure
     env_file:
       - .env
     environment:
