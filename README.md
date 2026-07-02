@@ -7,7 +7,7 @@
 <p align="center"><strong>你的 AI 通勤规划与提醒助手</strong></p>
 
 <p align="center">
-  <a href="https://github.com/zhuchenyu2008/Commute-Planner">项目源码</a>
+  <a href="#功能亮点">功能亮点</a>
   ·
   <a href="README.en.md">English</a>
   ·
@@ -43,7 +43,7 @@ AI Commute 是一个面向个人通勤场景的智能规划应用。它使用 Ne
 - **多段行程与缓冲**：支持路线分段、天气/交通缓冲、最晚出发时间和提醒计划。
 - **用户级设置**：保存默认城市、默认出发点、通勤偏好、Telegram Chat ID、邮件接收人和路线变化阈值。
 - **通知闭环**：内置 scheduler、Telegram worker、邮件模板和通知发送日志。
-- **项目署名**：设置页展示作者署名、项目源码入口和可维护的致谢名单。
+- **项目署名**：设置页展示作者署名和可维护的致谢名单。
 - **部署友好**：支持本机一键启动，也支持 Docker Compose 同时运行 Web、scheduler 和 Telegram worker。
 
 ## 界面截图
@@ -247,5 +247,5 @@ npm run test:e2e -- tests/e2e/commute-flow.spec.ts --reporter=line --workers=1
 ## 项目信息
 
 - 作者：ZhuChenyu
-- 源码地址：[zhuchenyu2008/Commute-Planner](https://github.com/zhuchenyu2008/Commute-Planner)
+- README：中文 / [English](README.en.md)
 - 许可证：AGPL-3.0

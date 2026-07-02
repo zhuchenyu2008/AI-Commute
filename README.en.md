@@ -7,7 +7,7 @@
 <p align="center"><strong>Your AI commute planning and reminder assistant</strong></p>
 
 <p align="center">
-  <a href="https://github.com/zhuchenyu2008/Commute-Planner">Source Code</a>
+  <a href="#highlights">Highlights</a>
   ·
   <a href="README.md">中文</a>
   ·
@@ -43,7 +43,7 @@ It is useful when you want to:
 - **Multi-leg trips and buffers**: Supports route legs, weather/traffic buffers, latest departure time, and reminder scheduling.
 - **User-level settings**: Saves default city, default origin, commute preferences, Telegram Chat ID, email recipient, and route-change thresholds.
 - **Notification loop**: Includes a scheduler, Telegram worker, email templates, and notification delivery logs.
-- **Project attribution**: The settings page shows the author, source-code entry, and maintainable acknowledgements.
+- **Project attribution**: The settings page shows the author and maintainable acknowledgements.
 - **Deployment friendly**: Supports one-command local startup and Docker Compose for the web app, scheduler, and Telegram worker.
 
 ## Screenshots
@@ -247,5 +247,5 @@ npm run test:e2e -- tests/e2e/commute-flow.spec.ts --reporter=line --workers=1
 ## Project Info
 
 - Author: ZhuChenyu
-- Source Code: [zhuchenyu2008/Commute-Planner](https://github.com/zhuchenyu2008/Commute-Planner)
+- README: [中文](README.md) / English
 - License: AGPL-3.0
