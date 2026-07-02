@@ -2,11 +2,19 @@ import tls from "node:tls";
 import nodemailer from "nodemailer";
 import type { NotificationSendResult } from "./telegram";
 
+export type EmailAttachment = {
+  filename: string;
+  cid?: string;
+  content: Buffer;
+  contentType?: string;
+};
+
 export type EmailSendInput = {
   to?: string | null;
   subject: string;
   text: string;
   html?: string;
+  attachments?: EmailAttachment[];
 };
 
 const hasValue = (value: string | undefined | null): value is string =>
@@ -60,6 +68,7 @@ export async function sendEmail({
   subject,
   text,
   html,
+  attachments,
 }: EmailSendInput): Promise<NotificationSendResult> {
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
@@ -105,6 +114,7 @@ export async function sendEmail({
       subject,
       text,
       ...(html ? { html } : {}),
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
     });
 
     return { status: "sent", recipient };

@@ -24,6 +24,7 @@ export async function sendTemplateTestEmails({
       subject: `[测试] ${email.subject}`,
       text: email.text,
       html: email.html,
+      attachments: email.attachments,
     }).catch((error: unknown): NotificationSendResult => {
       return {
         status: "failed",

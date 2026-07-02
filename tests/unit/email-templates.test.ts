@@ -58,10 +58,90 @@ describe("email templates", () => {
     const html = `${departureEmail.html}\n${routeChangeEmail.html}`;
 
     expect(html).toContain("max-width:600px");
-    expect(html).toContain("grid-template-columns:1fr 1fr");
+    expect(html).toContain("table-layout:fixed");
     expect(html).toContain("box-shadow:0 8px 18px rgba(37,99,235,0.22)");
     expect(html).not.toContain("请在 ");
     expect(html).not.toContain("预留足够通勤时间抵达");
+  });
+
+  it("uses mobile email-safe table layout with bundled icon images", () => {
+    const departureEmail = buildDepartureReminderEmail(baseInput);
+    const routeChangeEmail = buildRouteChangeEmail({
+      ...baseInput,
+      changeMinutes: 5,
+      previousLatestDepartAt: new Date("2026-07-01T00:30:00.000Z"),
+    });
+    const html = `${departureEmail.html}\n${routeChangeEmail.html}`;
+
+    expect(html).toContain('<table role="presentation"');
+    expect(html).toContain("table-layout:fixed");
+    expect(html).toContain('src="cid:');
+    expect(html).toContain("route-primary");
+    expect(html).not.toMatch(/display\s*:\s*(?:inline-)?flex/i);
+    expect(html).not.toMatch(/display\s*:\s*grid/i);
+    expect(html).not.toContain("grid-template-columns");
+    expect(html).not.toContain("<svg");
+    expect(departureEmail.attachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cid: expect.stringContaining("route-primary"),
+          contentType: "image/png",
+        }),
+      ])
+    );
+    expect(routeChangeEmail.attachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cid: expect.stringContaining("route-primary"),
+          contentType: "image/png",
+        }),
+        expect.objectContaining({
+          cid: expect.stringContaining("clock-error"),
+          contentType: "image/png",
+        }),
+      ])
+    );
+  });
+
+  it("uses the same compact top bar for departure and route change emails", () => {
+    const departureEmail = buildDepartureReminderEmail(baseInput);
+    const routeChangeEmail = buildRouteChangeEmail({
+      ...baseInput,
+      changeMinutes: 5,
+      previousLatestDepartAt: new Date("2026-07-01T00:30:00.000Z"),
+    });
+
+    expect(departureEmail.html).toContain(
+      `padding:16px 20px;border-bottom:1px solid #d8dde8;background:#ffffff;`
+    );
+    expect(routeChangeEmail.html).toContain(
+      `padding:16px 20px;border-bottom:1px solid #d8dde8;background:#ffffff;`
+    );
+    expect(departureEmail.html).toContain("padding:0px 12px 0;");
+    expect(departureEmail.html).toContain(
+      'src="cid:route-primary@ai-commute"'
+    );
+    expect(departureEmail.html).toContain("text-align:right");
+    expect(departureEmail.html).not.toContain("commute-brand@ai-commute");
+    expect(departureEmail.html).not.toContain("margin-bottom:32px");
+  });
+
+  it("renders clock times in html so mobile clients do not auto-link or underline them", () => {
+    const departureEmail = buildDepartureReminderEmail(baseInput);
+    const routeChangeEmail = buildRouteChangeEmail({
+      ...baseInput,
+      changeMinutes: 5,
+      previousLatestDepartAt: new Date("2026-07-01T00:30:00.000Z"),
+    });
+    const html = `${departureEmail.html}\n${routeChangeEmail.html}`;
+
+    expect(departureEmail.text).toContain("08:35");
+    expect(routeChangeEmail.text).toContain("08:35");
+    expect(html).toContain("commute-time");
+    expect(html).toContain("&#8288;:&#8288;");
+    expect(html).toContain("text-decoration:none !important");
+    expect(html).not.toContain(">08:35<");
+    expect(html).not.toContain(">09:15<");
   });
 
   it("builds a route change email that emphasizes the changed departure time", () => {

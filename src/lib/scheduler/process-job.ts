@@ -405,6 +405,7 @@ async function deliverReminderNotification(input: {
       subject: input.email?.subject ?? input.subject,
       text: input.email?.text ?? input.content,
       html: input.email?.html,
+      attachments: input.email?.attachments,
     }).then(async (result) => {
       await writeNotificationLog({
         tripId: input.job.tripId,

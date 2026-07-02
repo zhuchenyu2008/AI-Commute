@@ -102,6 +102,35 @@ describe("email notifications", () => {
     );
   });
 
+  it("passes inline image attachments to nodemailer when provided", async () => {
+    setCompleteSmtpEnv();
+    createTransportMock.mockReturnValue({ sendMail: sendMailMock });
+    sendMailMock.mockResolvedValue({});
+    const attachments = [
+      {
+        filename: "clock.png",
+        cid: "clock-muted@ai-commute",
+        content: Buffer.from("png"),
+        contentType: "image/png",
+      },
+    ];
+
+    await sendEmail({
+      to: "receiver@example.com",
+      subject: "Inline image test",
+      text: "Plain text fallback",
+      html: '<img src="cid:clock-muted@ai-commute" alt="">',
+      attachments,
+    });
+
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: '<img src="cid:clock-muted@ai-commute" alt="">',
+        attachments,
+      })
+    );
+  });
+
   it("returns an actionable certificate diagnostic for Node TLS chain errors", async () => {
     setCompleteSmtpEnv();
     createTransportMock.mockReturnValue({ sendMail: sendMailMock });
