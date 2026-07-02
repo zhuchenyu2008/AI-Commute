@@ -22,6 +22,7 @@ import { CurrentLocationLabel } from "@/components/home/current-location-label";
 import { BufferList } from "@/components/trips/buffer-list";
 import { RouteTimeline } from "@/components/trips/route-timeline";
 import { LoginForm } from "@app/login/login-form";
+import { ProjectAttribution } from "@app/settings/project-attribution";
 import SettingsPage from "@app/settings/page";
 import { SettingsForm } from "@app/settings/settings-form";
 import {
@@ -895,6 +896,20 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain(
       'href="https://github.com/zhuchenyu2008/Commute-Planner"'
     );
+    expect(html).toContain("致谢名单");
+  });
+
+  it("opens handwritten credits from the project attribution card", () => {
+    render(<ProjectAttribution />);
+
+    fireEvent.click(screen.getByRole("button", { name: "致谢名单" }));
+
+    expect(screen.getByRole("dialog", { name: "致谢名单" })).toBeTruthy();
+    expect(screen.getByText(/特别感谢/)).toBeTruthy();
+    expect(screen.getByText("ZhuChenyu")).toBeTruthy();
+    expect(
+      screen.getByTestId("credits-handwriting").getAttribute("class")
+    ).toContain("font-handwriting");
   });
 
   it("renders login and settings form controls with visible field frames", () => {

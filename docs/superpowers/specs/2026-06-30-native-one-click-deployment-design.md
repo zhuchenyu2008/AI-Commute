@@ -4,7 +4,7 @@
 
 ## 背景
 
-Commute Planner 当前已经提供 Docker 部署方式：`docker compose up --build` 会构建应用、执行 Prisma migration，并同时运行 Web、scheduler 和 Telegram worker。用户希望新增一套和 Docker 同等级的本机部署方式，同时支持 Windows 和 Linux，并在启动前引导用户补齐缺失配置。
+AI Commute 当前已经提供 Docker 部署方式：`docker compose up --build` 会构建应用、执行 Prisma migration，并同时运行 Web、scheduler 和 Telegram worker。用户希望新增一套和 Docker 同等级的本机部署方式，同时支持 Windows 和 Linux，并在启动前引导用户补齐缺失配置。
 
 这套脚本面向本机生产部署，不替代 `npm run dev`。开发热更新仍然使用现有开发命令。
 

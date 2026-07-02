@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the fixed commute planner with an AI-led planner that calls AMap and persistence tools until it decides the final trip.
+**Goal:** Replace the fixed route-planning flow with an AI-led planner that calls AMap and persistence tools until it decides the final trip.
 
 **Architecture:** Keep `runWithTimeoutAndRetry` as the only wall-clock control. Add an injectable chat client, expose settings, memories, all AMap methods, and `create_trip` as tools, and loop on model tool calls without a round limit. The application validates and persists the AI's final structured `create_trip` arguments but does not rank routes or add fixed buffers.
 

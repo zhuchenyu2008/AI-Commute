@@ -15,6 +15,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+.font-handwriting {
+  font-family: "LXGW WenKai", "KaiTi", "STKaiti", "FangSong", "Microsoft YaHei",
+    cursive;
+}
+
 .glass-card {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px);

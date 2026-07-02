@@ -31,7 +31,8 @@ describe("Docker configuration", () => {
     expect(readme).toContain("## Docker");
     expect(readme).toContain("## 界面截图");
     expect(readme).toContain("output/readme-assets/home.png");
-    expect(readme).toContain("output/readme-assets/settings.png");
+    expect(readme).toContain("output/readme-assets/history.png");
+    expect(readme).toContain("output/readme-assets/memories.png");
     expect(readme).toContain("output/readme-assets/departure-reminder-mobile.png");
     expect(readme).toContain("output/readme-assets/route-change-mobile.png");
     expect(readme).toContain("npm run dev");

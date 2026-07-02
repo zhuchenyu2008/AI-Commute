@@ -41,17 +41,16 @@ AI Commute 是一个面向个人通勤场景的智能规划应用。它使用 Ne
 - **多段行程与缓冲**：支持路线分段、天气/交通缓冲、最晚出发时间和提醒计划。
 - **用户级设置**：保存默认城市、默认出发点、通勤偏好、Telegram Chat ID、邮件接收人和路线变化阈值。
 - **通知闭环**：内置 scheduler、Telegram worker、邮件模板和通知发送日志。
+- **项目署名**：设置页展示作者署名、GitHub 仓库入口和可维护的致谢名单。
 - **部署友好**：支持本机一键启动，也支持 Docker Compose 同时运行 Web、scheduler 和 Telegram worker。
 
 ## 界面截图
 
-### 首页
+> 页面截图使用脱敏演示数据生成，不包含个人真实定位、路线或记忆内容。
 
-![首页](output/readme-assets/home.png)
-
-### 设置页
-
-![设置页](output/readme-assets/settings.png)
+| 首页 | 历史 | 记忆 |
+| --- | --- | --- |
+| <img src="output/readme-assets/home.png" alt="首页" width="240"> | <img src="output/readme-assets/history.png" alt="历史行程" width="240"> | <img src="output/readme-assets/memories.png" alt="通勤记忆" width="240"> |
 
 ### 邮件提醒
 
