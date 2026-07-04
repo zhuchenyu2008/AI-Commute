@@ -25,6 +25,7 @@ import {
   formatReminderStatus,
   getMonitoringStatusDisplay,
   getMonitoringSummary,
+  isTripMonitoringCancellable,
 } from "@/lib/trips/monitoring";
 
 type TripPageProps = {
@@ -171,8 +172,10 @@ export default async function TripDetailPage({ params }: TripPageProps) {
     }))
   );
   const reminders = trip.reminderJobs;
+  const now = new Date();
   const monitoringSummary = getMonitoringSummary({
     createdAt: trip.createdAt,
+    now,
     scheduledReminderCount: reminders.filter(
       (reminder) => reminder.status === "scheduled"
     ).length,
@@ -184,7 +187,13 @@ export default async function TripDetailPage({ params }: TripPageProps) {
   const monitoringStatusDisplay = getMonitoringStatusDisplay({
     tripStatus: trip.status,
     targetArriveAt: trip.targetArriveAt,
+    now,
     latestRecalculation,
+  });
+  const canCancelMonitoring = isTripMonitoringCancellable({
+    status: trip.status,
+    targetArriveAt: trip.targetArriveAt,
+    now,
   });
   const agentSessionId = trip.agentSessions[0]?.id ?? trip.agentSessionId;
   const routeTitle =
@@ -377,7 +386,9 @@ export default async function TripDetailPage({ params }: TripPageProps) {
                 </div>
               ) : null}
               <div className="mt-4 flex flex-wrap items-start gap-2">
-                <MonitoringActions tripId={trip.id} status={trip.status} />
+                {canCancelMonitoring ? (
+                  <MonitoringActions tripId={trip.id} status={trip.status} />
+                ) : null}
                 <TripDeleteButton tripId={trip.id} />
               </div>
             </div>

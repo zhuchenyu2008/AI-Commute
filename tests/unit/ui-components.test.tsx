@@ -13,7 +13,7 @@ import {
 } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import RootLayout from "@app/layout";
+import RootLayout, { metadata } from "@app/layout";
 import {
   AgentEventList,
   getAgentConversationHref,
@@ -208,6 +208,29 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain("--active-index:2");
   });
 
+  it("keeps the uploaded logo out of rendered pages", () => {
+    const html = renderToStaticMarkup(
+      <AppShell active="home">
+        <div>Content</div>
+      </AppShell>
+    );
+    const source = readFileSync(
+      join(process.cwd(), "src/components/app-shell.tsx"),
+      "utf8"
+    );
+
+    expect(html).not.toContain("logo_1.png");
+    expect(html).toContain("AI Commute");
+    expect(source).not.toContain("logo_1.png");
+  });
+
+  it("uses the uploaded square logo as the browser favicon", () => {
+    expect(metadata.icons).toMatchObject({
+      apple: [{ url: "/logo_1.png" }],
+      icon: [{ url: "/logo_1.png", sizes: "1254x1254", type: "image/png" }],
+    });
+  });
+
   it("restores the trip agent conversation as the direct header action", () => {
     const source = readFileSync(
       join(process.cwd(), "app/trips/[tripId]/page.tsx"),
@@ -235,6 +258,21 @@ describe("sample-aligned UI components", () => {
     );
     expect(source.slice(monitoringActionIndex, deleteActionIndex)).not.toContain(
       "</GlassCard>"
+    );
+  });
+
+  it("guards cancel monitoring actions behind the unfinished monitoring check", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/trips/[tripId]/page.tsx"),
+      "utf8"
+    );
+
+    expect(source).toContain("isTripMonitoringCancellable");
+    expect(source).toMatch(
+      /const canCancelMonitoring = isTripMonitoringCancellable\(\{[\s\S]*status: trip\.status,[\s\S]*targetArriveAt: trip\.targetArriveAt,[\s\S]*\}\);/
+    );
+    expect(source).toMatch(
+      /\{canCancelMonitoring \? \(\s*<MonitoringActions tripId=\{trip\.id\} status=\{trip\.status\} \/>\s*\) : null\}/
     );
   });
 

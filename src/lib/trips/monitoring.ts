@@ -27,6 +27,12 @@ export type MonitoringStatusDisplayInput = {
   } | null;
 };
 
+export type TripMonitoringCancellableInput = {
+  status?: string | null;
+  targetArriveAt?: Date | null;
+  now?: Date;
+};
+
 const MONITORING_STATUS_LABELS: Record<string, string> = {
   cancelled: "监控已取消",
   completed: "已完成",
@@ -83,6 +89,21 @@ export function getMonitoringSummary({
     monitoredFor: formatMonitoredDuration({ createdAt, now }),
     scheduledReminderCount,
   };
+}
+
+export function isTripMonitoringCancellable({
+  status,
+  targetArriveAt,
+  now = new Date(),
+}: TripMonitoringCancellableInput) {
+  const normalizedStatus = status?.trim();
+  const isActiveMonitoring =
+    normalizedStatus === "monitoring" || normalizedStatus === "scheduled";
+
+  return Boolean(
+    isActiveMonitoring &&
+      (!targetArriveAt || !isExpiredScheduledTime(targetArriveAt, now))
+  );
 }
 
 export function getMonitoringStatusDisplay({

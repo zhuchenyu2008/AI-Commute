@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatReminderStatus,
   getMonitoringStatusDisplay,
+  isTripMonitoringCancellable,
 } from "@/lib/trips/monitoring";
 import { getTripDisplayStatus } from "@/lib/trips/display-status";
 
@@ -78,5 +79,36 @@ describe("trip display status helpers", () => {
       label: "已过期",
       isExpired: true,
     });
+  });
+
+  it("only allows cancelling monitoring for active unfinished trips", () => {
+    expect(
+      isTripMonitoringCancellable?.({
+        status: "monitoring",
+        targetArriveAt: new Date("2026-06-30T01:30:00.000Z"),
+        now,
+      })
+    ).toBe(true);
+    expect(
+      isTripMonitoringCancellable?.({
+        status: "scheduled",
+        targetArriveAt: new Date("2026-06-30T01:30:00.000Z"),
+        now,
+      })
+    ).toBe(true);
+    expect(
+      isTripMonitoringCancellable?.({
+        status: "monitoring",
+        targetArriveAt: new Date("2026-06-30T00:30:00.000Z"),
+        now,
+      })
+    ).toBe(false);
+    expect(
+      isTripMonitoringCancellable?.({
+        status: "completed",
+        targetArriveAt: new Date("2026-06-30T01:30:00.000Z"),
+        now,
+      })
+    ).toBe(false);
   });
 });

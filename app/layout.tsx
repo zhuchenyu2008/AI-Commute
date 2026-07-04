@@ -6,6 +6,22 @@ import { APP_DESCRIPTION, APP_NAME } from "@/lib/project";
 export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_DESCRIPTION,
+  icons: {
+    icon: [
+      {
+        url: "/logo_1.png",
+        sizes: "1254x1254",
+        type: "image/png",
+      },
+    ],
+    apple: [
+      {
+        url: "/logo_1.png",
+        sizes: "1254x1254",
+        type: "image/png",
+      },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
