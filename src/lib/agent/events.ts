@@ -25,6 +25,8 @@ export type AgentEvent = {
   createdAt: string | Date;
 };
 
+const VISIBLE_MESSAGE_ROLES = new Set(["assistant", "user"]);
+
 export function formatAgentToolName(name: string) {
   const labels: Record<string, string> = {
     cancel_trip_monitoring: "取消行程监控",
@@ -71,17 +73,19 @@ export function buildAgentEvents(session: {
   toolCalls: AgentToolCallEventSource[];
 }): AgentEvent[] {
   return [
-    ...session.messages.map((message) => ({
-      id: `message-${message.id}`,
-      kind: "message" as const,
-      title: message.role === "assistant" ? "智能体更新" : "用户请求",
-      detail:
-        message.role === "assistant"
-          ? sanitizeAgentVisibleReply(message.content)
-          : message.content,
-      status: message.role,
-      createdAt: message.createdAt,
-    })),
+    ...session.messages
+      .filter((message) => VISIBLE_MESSAGE_ROLES.has(message.role))
+      .map((message) => ({
+        id: `message-${message.id}`,
+        kind: "message" as const,
+        title: message.role === "assistant" ? "智能体更新" : "用户请求",
+        detail:
+          message.role === "assistant"
+            ? sanitizeAgentVisibleReply(message.content)
+            : message.content,
+        status: message.role,
+        createdAt: message.createdAt,
+      })),
     ...session.toolCalls.map((tool) => ({
       id: `tool-${tool.id}`,
       kind: "tool" as const,

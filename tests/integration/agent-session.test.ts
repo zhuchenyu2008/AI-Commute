@@ -181,6 +181,41 @@ describe("agent planning sessions", () => {
     });
   });
 
+  it("does not return system messages from the session detail endpoint", async () => {
+    const { GET } = await import("@app/api/agent-sessions/[sessionId]/route");
+    const user = await createUserWithSettings("agent-session-visible-messages");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Plan from the visible prompt.",
+      currentLocation: {
+        name: "Internal Office Coordinate",
+        lngLat: "121.500000,29.800000",
+        city: "Ningbo",
+      },
+    });
+    const currentUser = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(currentUser);
+
+    const response = await GET(new Request("http://localhost"), {
+      params: Promise.resolve({ sessionId: session.id }),
+    });
+    const payload = await response.json();
+    const messages = payload.session.messages as Array<{
+      role: string;
+      content: string;
+    }>;
+
+    expect(response.status).toBe(200);
+    expect(messages.map((message) => message.role)).toEqual(["user"]);
+    expect(messages.map((message) => message.content)).toEqual([
+      "Plan from the visible prompt.",
+    ]);
+    expect(JSON.stringify(messages)).not.toContain("Internal Office Coordinate");
+  });
+
   it("rejects continuation messages for missing, foreign, or running sessions", async () => {
     const { POST } = await import(
       "@app/api/agent-sessions/[sessionId]/messages/route"

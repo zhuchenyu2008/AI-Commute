@@ -22,7 +22,10 @@ export async function GET(_request: Request, context: RouteContext) {
       userId: user.id,
     },
     include: {
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: {
+        where: { role: { in: ["user", "assistant"] } },
+        orderBy: { createdAt: "asc" },
+      },
       toolCalls: { orderBy: { createdAt: "asc" } },
     },
   });

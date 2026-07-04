@@ -536,6 +536,40 @@ describe("sample-aligned UI components", () => {
     ]);
   });
 
+  it("omits system messages from agent events", () => {
+    const events = buildAgentEvents({
+      messages: [
+        {
+          id: "system-location",
+          role: "system",
+          content: "Internal current location context",
+          createdAt: "2026-06-28T08:00:00.000Z",
+        },
+        {
+          id: "user-prompt",
+          role: "user",
+          content: "Plan my commute",
+          createdAt: "2026-06-28T08:01:00.000Z",
+        },
+        {
+          id: "assistant-update",
+          role: "assistant",
+          content: "Working on it.",
+          createdAt: "2026-06-28T08:02:00.000Z",
+        },
+      ],
+      toolCalls: [],
+    });
+
+    expect(events.map((event) => event.id)).toEqual([
+      "message-user-prompt",
+      "message-assistant-update",
+    ]);
+    expect(events.map((event) => event.detail)).not.toContain(
+      "Internal current location context"
+    );
+  });
+
   it("formats agent tool names for display", () => {
     expect(formatAgentToolName("get_weather_reference")).toBe("获取天气参考");
     expect(formatAgentToolName("create_trip")).toBe("创建行程");
