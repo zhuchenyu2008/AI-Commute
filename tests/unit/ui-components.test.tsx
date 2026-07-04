@@ -23,10 +23,14 @@ import {
 import { buildAgentEvents, formatAgentToolName } from "@/lib/agent/events";
 import { AppShell } from "@/components/app-shell";
 import { BottomNav } from "@/components/bottom-nav";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { HistoryDateFilter } from "@/components/history/history-date-filter";
 import { CommuteInput, getAgentStartResult } from "@/components/home/commute-input";
 import { CurrentLocationLabel } from "@/components/home/current-location-label";
+import { WEATHER_REFRESH_MS, WeatherCard } from "@/components/home/weather-card";
+import { MemoryDeleteButton } from "@/components/memories/memory-delete-button";
 import { BufferList } from "@/components/trips/buffer-list";
+import { TripDeleteButton } from "@/components/trips/trip-delete-button";
 import { RouteTimeline } from "@/components/trips/route-timeline";
 import { LoginForm } from "@app/login/login-form";
 import { credits } from "@app/settings/credits";
@@ -38,9 +42,10 @@ import {
   getMonitoringStatusDisplay,
 } from "@/lib/trips/monitoring";
 
-const { completeRouteViewTransitionMock, routerPushMock } = vi.hoisted(() => ({
+const { completeRouteViewTransitionMock, routerPushMock, routerRefreshMock } = vi.hoisted(() => ({
   completeRouteViewTransitionMock: vi.fn(),
   routerPushMock: vi.fn(),
+  routerRefreshMock: vi.fn(),
 }));
 
 const {
@@ -59,6 +64,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({
     push: routerPushMock,
+    refresh: routerRefreshMock,
   }),
   redirect: vi.fn((path: string) => {
     throw new Error(`redirect:${path}`);
@@ -95,11 +101,13 @@ describe("sample-aligned UI components", () => {
   afterEach(() => {
     cleanup();
     window.sessionStorage.clear();
+    window.localStorage.clear();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     completeRouteViewTransitionMock.mockReset();
     routerPushMock.mockReset();
+    routerRefreshMock.mockReset();
     getCurrentUserMock.mockReset();
     prismaUserSettingsFindUniqueMock.mockReset();
     readEnvMock.mockReset();
@@ -198,6 +206,177 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain("desktop-nav-motion");
     expect(html).toContain("desktop-nav-underline");
     expect(html).toContain("--active-index:2");
+  });
+
+  it("restores the trip agent conversation as the direct header action", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/trips/[tripId]/page.tsx"),
+      "utf8"
+    );
+    const agentActionIndex = source.indexOf("getAgentConversationHref(agentSessionId)");
+    const monitoringActionIndex = source.indexOf(
+      "<MonitoringActions tripId={trip.id} status={trip.status} />"
+    );
+    const deleteActionIndex = source.indexOf("<TripDeleteButton tripId={trip.id} />");
+    const headerEndIndex = source.indexOf("</header>", agentActionIndex);
+
+    expect(agentActionIndex).toBeGreaterThan(-1);
+    expect(monitoringActionIndex).toBeGreaterThan(-1);
+    expect(deleteActionIndex).toBeGreaterThan(-1);
+    expect(source).toMatch(
+      /<\/div>\s*\{agentSessionId \? \(\s*<Link[\s\S]*?href=\{getAgentConversationHref\(agentSessionId\)\}/
+    );
+    expect(source).not.toContain(
+      '<div className="flex flex-wrap items-center gap-2">\n              {agentSessionId ? ('
+    );
+    expect(deleteActionIndex).toBeGreaterThan(monitoringActionIndex);
+    expect(source.slice(agentActionIndex, headerEndIndex)).not.toContain(
+      "<TripDeleteButton"
+    );
+    expect(source.slice(monitoringActionIndex, deleteActionIndex)).not.toContain(
+      "</GlassCard>"
+    );
+  });
+
+  it("places confirmed memory deletion outside the memory text column", () => {
+    const source = readFileSync(join(process.cwd(), "app/memories/page.tsx"), "utf8");
+
+    expect(source).toContain(
+      'className="flex items-start justify-between gap-3"'
+    );
+    expect(source).toMatch(
+      /<div className="min-w-0 flex-1">[\s\S]*?<\/div>\s*<MemoryDeleteButton/
+    );
+  });
+
+  it("renders memory delete actions as restrained glass side buttons", () => {
+    const html = renderToStaticMarkup(
+      <MemoryDeleteButton endpoint="/api/memories/memory-1" label="Default origin" />
+    );
+
+    expect(html).toContain("h-10");
+    expect(html).toContain("w-10");
+    expect(html).toContain("bg-white/65");
+    expect(html).toContain("border-white/70");
+    expect(html).toContain("text-[#737686]");
+    expect(html).toContain("hover:bg-[#ffdad6]");
+    expect(html).not.toContain("bg-[#d8442e]");
+    expect(html).not.toContain("w-16");
+    expect(html).toContain("shrink-0");
+    expect(html).toContain("sr-only");
+    expect(html).not.toContain("mt-3");
+  });
+
+  it("centers delete confirmations as an opaque layered motion surface", () => {
+    const html = renderToStaticMarkup(
+      <DeleteConfirmDialog
+        description="此操作不可恢复。"
+        onCancel={() => undefined}
+        onConfirm={() => undefined}
+        open
+        title="删除行程"
+      />
+    );
+
+    expect(html).toContain("delete-confirm-layer");
+    expect(html).toContain("delete-confirm-overlay-in");
+    expect(html).toContain("delete-confirm-panel-in");
+    expect(html).toContain("z-[60]");
+    expect(html).toContain("items-center");
+    expect(html).toContain("justify-center");
+    expect(html).toContain("bg-white/95");
+    expect(html).not.toContain("items-end");
+    expect(html).not.toContain("sm:items-center");
+    expect(html).not.toContain("pb-[calc(112px+env(safe-area-inset-bottom))]");
+    expect(html).not.toContain("glass-card");
+    expect(html).not.toContain("backdrop-blur-sm");
+    expect(html).not.toContain("backdrop-blur-xl");
+  });
+
+  it("defines delete confirmation motion with reduced-motion fallbacks", () => {
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+
+    expect(css).toContain("@keyframes delete-dialog-overlay-in");
+    expect(css).toContain("@keyframes delete-dialog-overlay-out");
+    expect(css).toContain("@keyframes delete-dialog-panel-in");
+    expect(css).toContain("@keyframes delete-dialog-panel-out");
+    expect(css).toMatch(
+      /\.delete-confirm-overlay-in\s*\{[^}]*animation:\s*delete-dialog-overlay-in 160ms/s
+    );
+    expect(css).toMatch(
+      /\.delete-confirm-panel-in\s*\{[^}]*animation:\s*delete-dialog-panel-in 220ms/s
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.delete-confirm-overlay-in[\s\S]*animation:\s*none;/s
+    );
+  });
+
+  it("opens a custom confirmation dialog before deleting a trip", async () => {
+    const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripDeleteButton tripId="trip-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "删除行程" }));
+
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog", { name: "删除行程" });
+    expect(within(dialog).getByText("此操作不可恢复。")).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认删除" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/trips/trip-1", {
+        method: "DELETE",
+      });
+    });
+    expect(routerPushMock).toHaveBeenCalledWith("/history");
+    expect(routerRefreshMock).toHaveBeenCalled();
+  });
+
+  it("opens a custom confirmation dialog before deleting a memory", async () => {
+    const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryDeleteButton
+        endpoint="/api/memories/memory-1"
+        label="Default origin"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "删除Default origin" }));
+
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog", { name: "删除记忆" });
+    expect(within(dialog).getByText("Default origin")).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "删除记忆" })).toBeNull();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除Default origin" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "删除记忆" })).getByRole(
+        "button",
+        { name: "确认删除" }
+      )
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/memories/memory-1", {
+        method: "DELETE",
+      });
+    });
+    expect(routerRefreshMock).toHaveBeenCalled();
   });
 
   it("renders buffer items with weather as zero-minute context", () => {
@@ -474,6 +653,49 @@ describe("sample-aligned UI components", () => {
     expect(
       window.sessionStorage.getItem("ai-commute:agent-session")
     ).toBe("session-1");
+  });
+
+  it("sends the browser current location context when starting an agent session", async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        prompt: "从我现在的位置出发去图书馆",
+        currentLocation: {
+          name: "宁波外事学校",
+          lngLat: "121.523031,29.865249",
+          city: "宁波",
+        },
+      });
+
+      return Response.json(
+        { sessionId: "session-location", status: "running" },
+        { status: 201 }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(
+      "ai-commute:current-location",
+      JSON.stringify({
+        name: "宁波外事学校",
+        lngLat: "121.523031,29.865249",
+        city: "宁波",
+      })
+    );
+
+    const { container } = render(<CommuteInput />);
+    const promptInput = container.querySelector("input");
+    const submitButton = container.querySelector('button[type="submit"]');
+
+    fireEvent.change(promptInput!, {
+      target: { value: " 从我现在的位置出发去图书馆 " },
+    });
+    fireEvent.click(submitButton!);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/agent-sessions",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
   });
 
   it("does not store an agent transition prompt for non-agent routes", async () => {
@@ -1046,6 +1268,58 @@ describe("sample-aligned UI components", () => {
     expect(html).not.toContain("出发点坐标");
     expect(html).toContain('name="originLngLat"');
     expect(html).toContain('type="hidden"');
+    expect(html).toContain("grid-cols-[minmax(0,1fr)_auto]");
+  });
+
+  it("preloads credits handwriting fonts when settings attribution mounts", () => {
+    const originalFonts = document.fonts;
+    const load = vi.fn();
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { load },
+    });
+
+    try {
+      render(<ProjectAttribution />);
+
+      expect(load).toHaveBeenCalledWith('400 24px "Zhi Mang Xing"');
+      expect(load).toHaveBeenCalledWith('400 24px "Stack Sans Notch"');
+      expect(load).toHaveBeenCalledWith('400 18px "Caveat"');
+    } finally {
+      Object.defineProperty(document, "fonts", {
+        configurable: true,
+        value: originalFonts,
+      });
+    }
+  });
+
+  it("loads home weather immediately and refreshes every half hour", async () => {
+    let weatherRequests = 0;
+    const fetchMock = vi.fn(async () => {
+      weatherRequests += 1;
+
+      if (weatherRequests === 1) {
+        return Response.json({
+          weather: { city: "宁波", summary: "小雨, 24°C" },
+        });
+      }
+
+      return Response.json({
+        weather: { city: "宁波", summary: "多云, 26°C" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(WEATHER_REFRESH_MS).toBe(30 * 60 * 1000);
+    render(<WeatherCard city="宁波" refreshMs={5} />);
+
+    expect(await screen.findByText("小雨, 24°C")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith("/api/weather?city=%E5%AE%81%E6%B3%A2");
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText("多云, 26°C")).toBeTruthy();
   });
 
   it("opens the custom route preference selector options", () => {
@@ -1068,8 +1342,8 @@ describe("sample-aligned UI components", () => {
     expect(screen.getByRole("option", { name: /公交地铁优先/ })).toBeTruthy();
   });
 
-  it("keeps the current location label textual instead of coordinates", async () => {
-    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+  it("reverse geocodes browser coordinates and stores a named current location", async () => {
+    const watchPosition = vi.fn((success: PositionCallback) => {
       success({
         coords: {
           latitude: 29.865249,
@@ -1082,16 +1356,59 @@ describe("sample-aligned UI components", () => {
         },
         timestamp: Date.now(),
       } as GeolocationPosition);
+      return 9;
     });
+    const clearWatch = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        location: {
+          name: "宁波外事学校",
+          lngLat: "121.523031,29.865249",
+          city: "宁波",
+        },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("navigator", {
-      geolocation: { getCurrentPosition },
+      geolocation: { watchPosition, clearWatch },
     });
 
     render(<CurrentLocationLabel fallbackCity="宁波外事学校" />);
 
     expect(await screen.findByText("宁波外事学校")).toBeTruthy();
     expect(screen.queryByText(/29\.8652/)).toBeNull();
-    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(watchPosition).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/location/reverse-geocode?lng=121.523031&lat=29.865249"
+    );
+    expect(
+      JSON.parse(window.localStorage.getItem("ai-commute:current-location") ?? "{}")
+    ).toMatchObject({
+      name: "宁波外事学校",
+      lngLat: "121.523031,29.865249",
+      city: "宁波",
+    });
+  });
+
+  it("falls back to the default origin when location permission is denied", async () => {
+    const watchPosition = vi.fn(
+      (_success: PositionCallback, error: PositionErrorCallback) => {
+        error({
+          code: 1,
+          message: "denied",
+          PERMISSION_DENIED: 1,
+        } as GeolocationPositionError);
+        return 3;
+      }
+    );
+    vi.stubGlobal("navigator", {
+      geolocation: { watchPosition, clearWatch: vi.fn() },
+    });
+
+    render(<CurrentLocationLabel fallbackCity="金都嘉园" />);
+
+    expect(await screen.findByText("金都嘉园")).toBeTruthy();
+    expect(window.localStorage.getItem("ai-commute:current-location")).toBeNull();
   });
 
   it("allows the current location label to be styled as the home heading", () => {

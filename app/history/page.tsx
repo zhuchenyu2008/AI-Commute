@@ -6,7 +6,11 @@ import { GlassCard } from "@/components/glass-card";
 import { HistoryDateFilter } from "@/components/history/history-date-filter";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { getBeijingDayRange } from "@/lib/history/day-filter";
+import {
+  getBeijingDayRange,
+  getTripHistoryDateWhere,
+  getTripHistoryOrderBy,
+} from "@/lib/history/day-filter";
 import { formatDateTimeInTimeZone } from "@/lib/time-format";
 import {
   getTripDisplayStatus,
@@ -38,12 +42,9 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const trips = await prisma.trip.findMany({
     where: {
       userId: user.id,
-      createdAt: {
-        gte: dayRange.start,
-        lt: dayRange.end,
-      },
+      ...getTripHistoryDateWhere(dayRange),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: getTripHistoryOrderBy(),
     include: {
       legs: {
         orderBy: { order: "asc" },

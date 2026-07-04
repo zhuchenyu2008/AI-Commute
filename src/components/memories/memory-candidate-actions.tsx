@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { MemoryDeleteButton } from "@/components/memories/memory-delete-button";
 
 export function MemoryCandidateActions({
   candidateId,
+  label,
 }: {
   candidateId: string;
+  label: string;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState("");
@@ -46,6 +49,10 @@ export function MemoryCandidateActions({
       {status ? (
         <span className="text-xs font-semibold text-[#434655]">{status}</span>
       ) : null}
+      <MemoryDeleteButton
+        endpoint={`/api/memory-candidates/${candidateId}`}
+        label={label}
+      />
     </div>
   );
 }

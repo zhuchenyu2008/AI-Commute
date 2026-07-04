@@ -45,6 +45,8 @@ export type {
   Poi,
   PoiDetailRequest,
   PoiSearchRequest,
+  ReverseGeocodeRequest,
+  ReverseGeocodeResult,
   RouteMode,
   RouteRequest,
   RouteResult,

@@ -277,6 +277,76 @@ describe("scheduler reminder processing", () => {
     ).resolves.toBe(2);
   });
 
+  it("marks a trip completed after the final departure reminder finishes", async () => {
+    const now = new Date("2000-01-01T08:30:00.000Z");
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const user = await prisma.user.create({
+      data: {
+        email: `scheduler-complete-${uniqueId}@example.com`,
+        name: "Scheduler Complete User",
+        passwordHash: "hash",
+        settings: {
+          create: {
+            originLngLat: "121.5230315924,29.8652491273",
+            telegramChatId: `telegram-complete-${uniqueId}`,
+            emailRecipient: "scheduler@example.com",
+          },
+        },
+      },
+    });
+    const trip = await prisma.trip.create({
+      data: {
+        userId: user.id,
+        title: "Final commute",
+        rawPrompt: "Arrive after final reminder.",
+        timezone: "Asia/Shanghai",
+        status: "monitoring",
+        targetArriveAt: new Date(now.getTime() + 30 * 60_000),
+        stops: {
+          create: [
+            { order: 0, name: "Home", kind: "origin" },
+            { order: 1, name: "Office", kind: "destination" },
+          ],
+        },
+      },
+      include: { stops: true },
+    });
+    const leg = await prisma.tripLeg.create({
+      data: {
+        tripId: trip.id,
+        order: 0,
+        fromStopId: trip.stops[0].id,
+        toStopId: trip.stops[1].id,
+        originName: "Home",
+        originLngLat: "121.1,29.1",
+        destinationName: "Office",
+        latestDepartAt: now,
+        status: "monitoring",
+      },
+    });
+
+    await prisma.reminderJob.create({
+      data: {
+        tripId: trip.id,
+        legId: leg.id,
+        kind: "depart_now",
+        scheduledFor: now,
+        dedupeKey: `${trip.id}:${leg.id}:depart_now:final`,
+        payloadJson: JSON.stringify({ minutesBeforeDeparture: 0 }),
+      },
+    });
+
+    const result = await processDueReminderJobs({ now });
+
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+    await expect(
+      prisma.trip.findUniqueOrThrow({ where: { id: trip.id } })
+    ).resolves.toMatchObject({ status: "completed" });
+    await expect(
+      prisma.tripLeg.findUniqueOrThrow({ where: { id: leg.id } })
+    ).resolves.toMatchObject({ status: "completed" });
+  });
+
   it("runs route rechecks in the same agent session and suppresses notifications within the configured threshold", async () => {
     const now = new Date("2026-07-01T08:30:00.000Z");
     const user = await createSchedulerUser("scheduler-recheck-same-session", {
@@ -352,7 +422,7 @@ describe("scheduler reminder processing", () => {
     });
 
     expect(result.processed).toBeGreaterThanOrEqual(1);
-    expect(result.skipped).toBeGreaterThanOrEqual(1);
+    expect(result.completed).toBeGreaterThanOrEqual(1);
     expect(seenMessages).toContain("Current trip id");
     await expect(
       prisma.agentMessage.findMany({
@@ -368,7 +438,12 @@ describe("scheduler reminder processing", () => {
     );
     await expect(
       prisma.reminderJob.findUniqueOrThrow({ where: { id: recheckJob.id } })
-    ).resolves.toMatchObject({ status: "skipped" });
+    ).resolves.toMatchObject({ status: "completed" });
+    await expect(
+      prisma.recalculationLog.findFirstOrThrow({
+        where: { tripId: trip.id, trigger: "recheck" },
+      })
+    ).resolves.toMatchObject({ status: "completed" });
     await expect(
       prisma.notificationLog.count({ where: { tripId: trip.id } })
     ).resolves.toBe(0);

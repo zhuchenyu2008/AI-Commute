@@ -45,6 +45,20 @@ describe("createMockAmapClient", () => {
     expect(reference.summary).toContain("宁波");
   });
 
+  it("returns a named reverse geocode result for browser coordinates", async () => {
+    const client = createMockAmapClient();
+
+    const location = await client.reverseGeocode({
+      lngLat: "121.523031,29.865249",
+    });
+
+    expect(location).toMatchObject({
+      name: "宁波外事学校",
+      city: "宁波",
+      lngLat: "121.523031,29.865249",
+    });
+  });
+
   it("returns deterministic positive route durations for each commute mode", async () => {
     const client = createMockAmapClient();
     const routeRequest = {
@@ -94,6 +108,9 @@ describe("createAmapClient", () => {
         throw new Error("network down");
       }),
       getWeather: vi.fn(async () => {
+        throw new Error("network down");
+      }),
+      reverseGeocode: vi.fn(async () => {
         throw new Error("network down");
       }),
       getTransitRoute: vi.fn(async () => {

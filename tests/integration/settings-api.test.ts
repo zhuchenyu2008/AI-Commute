@@ -7,6 +7,8 @@ type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
 
 const getCurrentUserMock = vi.hoisted(() => vi.fn<() => Promise<CurrentUser | null>>());
 const searchPoiMock = vi.hoisted(() => vi.fn());
+const getWeatherMock = vi.hoisted(() => vi.fn());
+const reverseGeocodeMock = vi.hoisted(() => vi.fn());
 const createAmapClientMock = vi.hoisted(() => vi.fn());
 const sendTelegramMock = vi.hoisted(() => vi.fn());
 const sendEmailMock = vi.hoisted(() => vi.fn());
@@ -50,7 +52,22 @@ describe("settings API", () => {
         lngLat: "120.1,30.2"
       }
     ]);
-    createAmapClientMock.mockReturnValue({ searchPoi: searchPoiMock });
+    getWeatherMock.mockResolvedValue({
+      kind: "reference",
+      city: "宁波",
+      summary: "宁波, 小雨, 24°C",
+    });
+    reverseGeocodeMock.mockResolvedValue({
+      name: "宁波外事学校",
+      address: "浙江省宁波市鄞州区",
+      city: "宁波",
+      lngLat: "121.523031,29.865249",
+    });
+    createAmapClientMock.mockReturnValue({
+      searchPoi: searchPoiMock,
+      getWeather: getWeatherMock,
+      reverseGeocode: reverseGeocodeMock,
+    });
     sendTelegramMock.mockResolvedValue({
       status: "sent",
       recipient: "telegram-chat",
@@ -199,6 +216,61 @@ describe("settings API", () => {
 
     expect(response.status).toBe(401);
     expect(createAmapClientMock).not.toHaveBeenCalled();
+  });
+
+  it("returns weather for the requested city after authentication", async () => {
+    const { GET } = await import("@app/api/weather/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `weather-${Date.now()}@example.com`,
+        name: "Weather User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await GET(
+      new Request("http://localhost/api/weather?city=宁波")
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getWeatherMock).toHaveBeenCalledWith({ city: "宁波" });
+    expect(body.weather).toMatchObject({
+      city: "宁波",
+      summary: "宁波, 小雨, 24°C",
+    });
+  });
+
+  it("reverse geocodes browser coordinates for the current location label", async () => {
+    const { GET } = await import("@app/api/location/reverse-geocode/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `reverse-geocode-${Date.now()}@example.com`,
+        name: "Reverse Geocode User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/location/reverse-geocode?lng=121.523031&lat=29.865249"
+      )
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(reverseGeocodeMock).toHaveBeenCalledWith({
+      lngLat: "121.523031,29.865249",
+    });
+    expect(body.location).toMatchObject({
+      name: "宁波外事学校",
+      city: "宁波",
+      lngLat: "121.523031,29.865249",
+    });
   });
 
   it("persists valid settings updates", async () => {

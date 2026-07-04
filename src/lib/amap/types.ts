@@ -26,6 +26,18 @@ export type WeatherReference = {
   raw?: unknown;
 };
 
+export type ReverseGeocodeRequest = {
+  lngLat: string;
+};
+
+export type ReverseGeocodeResult = {
+  name: string;
+  address: string;
+  city: string;
+  lngLat: string;
+  raw?: unknown;
+};
+
 export type RouteMode = "transit" | "walking" | "bicycling";
 
 export type RouteRequest = {
@@ -46,6 +58,7 @@ export type AmapClient = {
   searchPoi(request: PoiSearchRequest): Promise<Poi[]>;
   getPoiDetail(request: PoiDetailRequest): Promise<Poi>;
   getWeather(request: WeatherRequest): Promise<WeatherReference>;
+  reverseGeocode(request: ReverseGeocodeRequest): Promise<ReverseGeocodeResult>;
   getTransitRoute(request: RouteRequest): Promise<RouteResult>;
   getWalkingRoute(request: RouteRequest): Promise<RouteResult>;
   getBicyclingRoute(request: RouteRequest): Promise<RouteResult>;

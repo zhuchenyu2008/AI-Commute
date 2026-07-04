@@ -180,3 +180,47 @@ export async function cancelTripMonitoring(input: {
     });
   });
 }
+
+export async function completeTripMonitoringIfFinished(input: {
+  tripId: string;
+  userId?: string;
+}) {
+  return prisma.$transaction(async (tx) => {
+    const unfinishedReminderCount = await tx.reminderJob.count({
+      where: {
+        tripId: input.tripId,
+        status: { in: ["scheduled", "running"] },
+      },
+    });
+
+    if (unfinishedReminderCount > 0) {
+      return null;
+    }
+
+    const trip = await tx.trip.findFirst({
+      where: {
+        id: input.tripId,
+        ...(input.userId ? { userId: input.userId } : {}),
+        status: { in: ["monitoring", "scheduled"] },
+      },
+      select: { id: true },
+    });
+
+    if (!trip) {
+      return null;
+    }
+
+    await tx.tripLeg.updateMany({
+      where: {
+        tripId: trip.id,
+        status: { in: ["monitoring", "scheduled", "running"] },
+      },
+      data: { status: "completed" },
+    });
+
+    return tx.trip.update({
+      where: { id: trip.id },
+      data: { status: "completed" },
+    });
+  });
+}

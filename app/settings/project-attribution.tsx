@@ -37,6 +37,9 @@ export function ProjectAttribution() {
 
   useEffect(() => {
     setIsMounted(true);
+    void document.fonts?.load('400 24px "Zhi Mang Xing"');
+    void document.fonts?.load('400 24px "Stack Sans Notch"');
+    void document.fonts?.load('400 18px "Caveat"');
   }, []);
 
   const creditsDialog = isCreditsOpen ? (

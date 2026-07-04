@@ -288,10 +288,10 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
 
         <section className="grid gap-3 py-4 md:grid-cols-[160px_1fr] md:items-start">
           <span className="text-sm font-medium text-on-surface-variant">默认出发点</span>
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <input name="originName" type="hidden" value={originName} />
             <input name="originLngLat" type="hidden" value={originLngLat} />
-            <div className="flex gap-2">
+            <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
               <input
                 aria-label="搜索默认出发点"
                 className="min-w-0 flex-1 rounded-2xl border form-field-frame px-4 py-3 text-base text-on-surface outline-none ring-primary/20 transition focus:ring-4"
@@ -301,7 +301,7 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
                 value={originQuery}
               />
               <button
-                className="rounded-2xl bg-[#2563eb] px-4 py-3 text-sm font-semibold text-white"
+                className="shrink-0 rounded-2xl bg-[#2563eb] px-4 py-3 text-sm font-semibold text-white"
                 onClick={searchPlaces}
                 type="button"
               >

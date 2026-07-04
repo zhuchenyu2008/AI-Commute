@@ -3,6 +3,8 @@ import type {
   Poi,
   PoiDetailRequest,
   PoiSearchRequest,
+  ReverseGeocodeRequest,
+  ReverseGeocodeResult,
   RouteMode,
   RouteRequest,
   RouteResult,
@@ -40,6 +42,18 @@ type AmapPoi = {
   address?: string | unknown[];
   location?: string;
   [key: string]: unknown;
+};
+
+type AmapRegeo = {
+  formatted_address?: string;
+  addressComponent?: {
+    city?: string | string[];
+    province?: string;
+    district?: string;
+  };
+  pois?: Array<{
+    name?: string;
+  }>;
 };
 
 const BASE_URL = "https://restapi.amap.com/v3";
@@ -83,6 +97,40 @@ const toPoi = (poi: AmapPoi): Poi => ({
   lngLat: poi.location ?? "0,0",
   raw: poi
 });
+
+const firstString = (value: unknown): string | undefined => {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value.find((item) => typeof item === "string" && item.trim());
+  }
+
+  return undefined;
+};
+
+function toReverseGeocodeResult(
+  requestBody: ReverseGeocodeRequest,
+  regeo: AmapRegeo | undefined,
+  raw: unknown
+): ReverseGeocodeResult {
+  const address = regeo?.formatted_address?.trim() ?? "";
+  const city =
+    firstString(regeo?.addressComponent?.city) ??
+    regeo?.addressComponent?.district ??
+    regeo?.addressComponent?.province ??
+    "";
+  const name = regeo?.pois?.find((poi) => poi.name?.trim())?.name ?? address;
+
+  return {
+    name: name || "当前位置",
+    address,
+    city,
+    lngLat: requestBody.lngLat,
+    raw,
+  };
+}
 
 export function createRealAmapClient(options: AmapClientOptions): AmapClient {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -246,6 +294,21 @@ export function createRealAmapClient(options: AmapClientOptions): AmapClient {
         summary: summaryParts.join(", ") || `${weatherCity} 暂无天气信息`,
         raw: data
       };
+    },
+
+    async reverseGeocode(
+      requestBody: ReverseGeocodeRequest
+    ): Promise<ReverseGeocodeResult> {
+      const data = await request<AmapEnvelope & { regeocode?: AmapRegeo }>(
+        `${BASE_URL}/geocode/regeo`,
+        {
+          location: requestBody.lngLat,
+          extensions: "all",
+          output: "json",
+        }
+      );
+
+      return toReverseGeocodeResult(requestBody, data.regeocode, data);
     },
 
     async getTransitRoute(requestBody: RouteRequest): Promise<RouteResult> {

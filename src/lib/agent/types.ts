@@ -30,6 +30,11 @@ export type AgentToolCallStatus = "running" | "completed" | "failed";
 export type StartPlanningSessionInput = {
   userId: string;
   prompt: string;
+  currentLocation?: {
+    name: string;
+    lngLat: string;
+    city?: string;
+  };
 };
 
 export type ContinueAgentSessionInput = {

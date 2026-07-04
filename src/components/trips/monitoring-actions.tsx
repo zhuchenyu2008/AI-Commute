@@ -54,7 +54,7 @@ export function MonitoringActions({
   }
 
   return (
-    <div className="mt-4 space-y-2">
+    <div className="space-y-2">
       <button
         className="inline-flex items-center justify-center gap-2 rounded-full bg-[#191c1e] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#30343a] disabled:cursor-not-allowed disabled:bg-[#c3c6d7] disabled:text-[#434655]"
         disabled={isDisabled}

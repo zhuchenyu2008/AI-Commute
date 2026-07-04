@@ -20,6 +20,7 @@ import {
   writeNotificationLog,
 } from "@/lib/notifications/log";
 import { sendTelegram } from "@/lib/notifications/telegram";
+import { completeTripMonitoringIfFinished } from "@/lib/trips/monitoring";
 import { replaceReminderSchedule } from "@/lib/trips/route-updates";
 import {
   expireStaleReminderJobs,
@@ -35,11 +36,14 @@ export type SchedulerTickInput = {
 };
 
 export type SchedulerTickResult = {
+  completed: number;
   processed: number;
   sent: number;
   skipped: number;
   failed: number;
 };
+
+type ReminderProcessStatus = NotificationSendStatus | "completed";
 
 type DueReminderJob = Awaited<ReturnType<typeof findDueReminderJobs>>[number];
 type RouteSnapshot = ReturnType<typeof snapshotLeg>;
@@ -473,7 +477,7 @@ async function deliverReminderNotification(input: {
 
 async function finishJob(input: {
   job: DueReminderJob;
-  status: NotificationSendStatus;
+  status: ReminderProcessStatus;
   recalculationId?: string | null;
   summary?: string;
 }) {
@@ -494,6 +498,7 @@ async function finishJob(input: {
       data: { status: input.status },
     }),
   ]);
+  await completeTripMonitoringIfFinished({ tripId: input.job.tripId });
 }
 
 async function processDepartureReminderJob(
@@ -576,7 +581,7 @@ async function processRouteRecheckJob(
   job: DueReminderJob,
   now: Date,
   agentOptions?: RunPlanningSessionOptions
-): Promise<NotificationSendStatus> {
+): Promise<ReminderProcessStatus> {
   const locked = await lockReminderJob(job.id, now);
 
   if (!locked) {
@@ -634,13 +639,13 @@ async function processRouteRecheckJob(
     if (changeMinutes <= thresholdMinutes) {
       await finishJob({
         job,
-        status: "skipped",
+        status: "completed",
         recalculationId: recalculation.id,
         summary: `路线复查完成：时间变化 ${changeMinutes.toFixed(
           1
         )} 分钟，未超过 ${thresholdMinutes} 分钟阈值。`,
       });
-      return "skipped";
+      return "completed";
     }
 
     await refreshReminderScheduleAfterRouteChange(job, now, before?.order);
@@ -716,7 +721,7 @@ async function processReminderJob(
   job: DueReminderJob,
   now: Date,
   agentOptions?: RunPlanningSessionOptions
-): Promise<NotificationSendStatus> {
+): Promise<ReminderProcessStatus> {
   if (job.kind === "recheck") {
     return processRouteRecheckJob(job, now, agentOptions);
   }
@@ -730,6 +735,7 @@ export async function processDueReminderJobs({
   staleGraceMs = STALE_REMINDER_GRACE_MS,
 }: SchedulerTickInput = {}): Promise<SchedulerTickResult> {
   const result: SchedulerTickResult = {
+    completed: 0,
     processed: 0,
     sent: 0,
     skipped: 0,

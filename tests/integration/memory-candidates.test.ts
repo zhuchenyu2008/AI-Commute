@@ -212,6 +212,72 @@ describe("memory candidate actions", () => {
     expect(payload).toMatchObject({ error: "未找到记忆候选" });
   });
 
+  it("deletes an owned confirmed memory", async () => {
+    const { DELETE } = await import("@app/api/memories/[memoryId]/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `delete-memory-${Date.now()}@example.com`,
+        name: "Delete Memory User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    const memory = await prisma.memory.create({
+      data: {
+        userId: user.id,
+        kind: "preference",
+        label: "下雨天优先公交",
+        valueJson: JSON.stringify({ mode: "transit" }),
+      },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await DELETE(new Request("http://localhost"), {
+      params: Promise.resolve({ memoryId: memory.id }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ status: "deleted" });
+    await expect(
+      prisma.memory.count({ where: { id: memory.id } })
+    ).resolves.toBe(0);
+  });
+
+  it("deletes an owned pending memory candidate", async () => {
+    const { DELETE } = await import(
+      "@app/api/memory-candidates/[candidateId]/route"
+    );
+    const user = await prisma.user.create({
+      data: {
+        email: `delete-memory-candidate-${Date.now()}@example.com`,
+        name: "Delete Memory Candidate User",
+        passwordHash: "hash",
+      },
+      include: { settings: true },
+    });
+    const candidate = await prisma.memoryCandidate.create({
+      data: {
+        userId: user.id,
+        kind: "origin",
+        label: "常从外事学校出发",
+        valueJson: JSON.stringify({ originName: "外事学校" }),
+      },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await DELETE(new Request("http://localhost"), {
+      params: Promise.resolve({ candidateId: candidate.id }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ status: "deleted" });
+    await expect(
+      prisma.memoryCandidate.count({ where: { id: candidate.id } })
+    ).resolves.toBe(0);
+  });
+
   it("allows only one concurrent confirm to create memory", async () => {
     const user = await prisma.user.create({
       data: {

@@ -109,6 +109,47 @@ describe("agent planning sessions", () => {
     });
   });
 
+  it("persists browser current location context for the planner", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `agent-current-location-${Date.now()}@example.com`,
+        name: "Agent Current Location",
+        passwordHash: "hash",
+      },
+    });
+
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "从我现在的位置出发去图书馆。",
+      currentLocation: {
+        name: "宁波外事学校",
+        lngLat: "121.523031,29.865249",
+        city: "宁波",
+      },
+    });
+    const persisted = await prisma.agentSession.findUniqueOrThrow({
+      where: { id: session.id },
+      include: { messages: { orderBy: { createdAt: "asc" } } },
+    });
+
+    expect(persisted.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("当前定位"),
+        }),
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("宁波外事学校"),
+        }),
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("121.523031,29.865249"),
+        }),
+      ])
+    );
+  });
+
   it("returns continuation metadata from the session detail endpoint", async () => {
     const { GET } = await import("@app/api/agent-sessions/[sessionId]/route");
     const user = await createUserWithSettings("agent-session-detail");

@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Brain,
   Clock3,
-  CloudSun,
   History,
   MapPin,
   Navigation,
@@ -13,12 +12,14 @@ import { AppShell } from "@/components/app-shell";
 import { GlassCard } from "@/components/glass-card";
 import { CommuteInput } from "@/components/home/commute-input";
 import { CurrentLocationLabel } from "@/components/home/current-location-label";
+import { WeatherCard } from "@/components/home/weather-card";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import {
   formatHistoryTripSummary,
   formatHomeTripStatus,
   formatLatestMemorySummary,
+  selectHomeTripForDisplay,
   type HomeTripStatusTone,
 } from "@/lib/home/summary";
 import { getTripDisplayStatus } from "@/lib/trips/display-status";
@@ -56,14 +57,20 @@ export default async function HomePage() {
     redirect("/login");
   }
 
-  const [settings, latestTrip, recentTrips, latestMemory, pendingMemoryCount] =
-    await Promise.all([
+  const [
+    settings,
+    homeTripCandidates,
+    recentTrips,
+    latestMemory,
+    pendingMemoryCount,
+  ] = await Promise.all([
     prisma.userSettings.findUnique({
       where: { userId: user.id },
     }),
-    prisma.trip.findFirst({
+    prisma.trip.findMany({
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
+      take: 20,
       include: {
         legs: {
           orderBy: { order: "asc" },
@@ -76,17 +83,19 @@ export default async function HomePage() {
       orderBy: { updatedAt: "desc" },
       take: 3,
     }),
-      prisma.memory.findFirst({
-        where: { userId: user.id },
-        orderBy: { updatedAt: "desc" },
-      }),
-      prisma.memoryCandidate.count({
-        where: { userId: user.id, status: "pending" },
-      }),
-    ]);
+    prisma.memory.findFirst({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.memoryCandidate.count({
+      where: { userId: user.id, status: "pending" },
+    }),
+  ]);
   const defaultCity = settings?.defaultCity ?? "宁波";
   const currentLocationName = settings?.originName ?? defaultCity;
-  const latestTripStatus = formatHomeTripStatus(latestTrip);
+  const now = new Date();
+  const latestTrip = selectHomeTripForDisplay(homeTripCandidates, now);
+  const latestTripStatus = formatHomeTripStatus(latestTrip, now);
   const latestTripHref = latestTrip ? `/trips/${latestTrip.id}` : "/history";
   const firstLeg = latestTrip?.legs[0];
   const latestMinutes =
@@ -110,15 +119,7 @@ export default async function HomePage() {
               />
             </h1>
           </div>
-          <GlassCard className="flex shrink-0 items-center gap-2 rounded-xl p-3">
-            <CloudSun aria-hidden="true" className="size-6 text-[#F59E0B]" />
-            <div>
-              <p className="text-sm font-bold text-[#191c1e]">24°C</p>
-              <p className="text-xs font-medium text-[#434655]">
-                稍后小雨
-              </p>
-            </div>
-          </GlassCard>
+          <WeatherCard city={defaultCity} />
         </header>
 
         <section className="py-4">

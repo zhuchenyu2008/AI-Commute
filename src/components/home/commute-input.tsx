@@ -7,6 +7,13 @@ import {
   savePendingAgentPrompt,
   startRouteViewTransition,
 } from "@/lib/ui/agent-transition";
+import { CURRENT_LOCATION_STORAGE_KEY } from "./current-location-label";
+
+type CurrentLocationContext = {
+  name: string;
+  lngLat: string;
+  city?: string;
+};
 
 export function getAgentStartResult(
   status: number,
@@ -33,6 +40,30 @@ export function getAgentStartResult(
   };
 }
 
+function readStoredCurrentLocation(): CurrentLocationContext | null {
+  const raw = window.localStorage.getItem(CURRENT_LOCATION_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<CurrentLocationContext>;
+
+    if (typeof parsed.name === "string" && typeof parsed.lngLat === "string") {
+      return {
+        name: parsed.name,
+        lngLat: parsed.lngLat,
+        city: typeof parsed.city === "string" ? parsed.city : undefined,
+      };
+    }
+  } catch {
+    window.localStorage.removeItem(CURRENT_LOCATION_STORAGE_KEY);
+  }
+
+  return null;
+}
+
 export function CommuteInput() {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -52,10 +83,14 @@ export function CommuteInput() {
     setIsSubmitting(true);
 
     try {
+      const currentLocation = readStoredCurrentLocation();
       const response = await fetch("/api/agent-sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: trimmedPrompt }),
+        body: JSON.stringify({
+          prompt: trimmedPrompt,
+          ...(currentLocation ? { currentLocation } : {}),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
 

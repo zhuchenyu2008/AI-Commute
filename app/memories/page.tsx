@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Brain, CircleDashed } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { GlassCard } from "@/components/glass-card";
+import { MemoryDeleteButton } from "@/components/memories/memory-delete-button";
 import { MemoryCandidateActions } from "@/components/memories/memory-candidate-actions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -44,19 +45,25 @@ export default async function MemoriesPage() {
           ) : (
             memories.map((memory) => (
               <GlassCard className="p-5" key={memory.id}>
-                <div className="flex items-start gap-3">
-                  <Brain
-                    aria-hidden="true"
-                    className="mt-1 size-5 shrink-0 text-[#2563eb]"
-                  />
-                  <div className="min-w-0">
-                    <p className="break-words text-base font-bold text-[#191c1e]">
-                      {memory.label}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-[#434655]">
-                      {formatMemoryKind(memory.kind)}
-                    </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <Brain
+                      aria-hidden="true"
+                      className="mt-1 size-5 shrink-0 text-[#2563eb]"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-base font-bold text-[#191c1e]">
+                        {memory.label}
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-[#434655]">
+                        {formatMemoryKind(memory.kind)}
+                      </p>
+                    </div>
                   </div>
+                  <MemoryDeleteButton
+                    endpoint={`/api/memories/${memory.id}`}
+                    label={memory.label}
+                  />
                 </div>
               </GlassCard>
             ))
@@ -84,7 +91,10 @@ export default async function MemoriesPage() {
                     <p className="mt-1 text-sm font-medium text-[#434655]">
                       {formatMemoryKind(candidate.kind)}
                     </p>
-                    <MemoryCandidateActions candidateId={candidate.id} />
+                    <MemoryCandidateActions
+                      candidateId={candidate.id}
+                      label={candidate.label}
+                    />
                   </div>
                 </div>
               </GlassCard>

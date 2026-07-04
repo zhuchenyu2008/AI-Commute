@@ -3,6 +3,7 @@ import {
   formatHomeTripStatus,
   formatHistoryTripSummary,
   formatLatestMemorySummary,
+  selectHomeTripForDisplay,
 } from "@/lib/home/summary";
 
 describe("home summary helpers", () => {
@@ -71,5 +72,63 @@ describe("home summary helpers", () => {
     ).toBe("偏好 · 下雨天优先公交");
 
     expect(formatLatestMemorySummary(null)).toBe("暂无已确认记忆");
+  });
+
+  it("prefers the nearest active trip over newer cancelled or expired trips", () => {
+    const now = new Date("2026-07-03T01:00:00.000Z");
+    const selected = selectHomeTripForDisplay(
+      [
+        {
+          id: "new-cancelled",
+          status: "cancelled",
+          updatedAt: new Date("2026-07-03T00:59:00.000Z"),
+          targetArriveAt: new Date("2026-07-03T00:30:00.000Z"),
+        },
+        {
+          id: "later-monitoring",
+          status: "monitoring",
+          updatedAt: new Date("2026-07-02T23:00:00.000Z"),
+          targetArriveAt: new Date("2026-07-03T03:00:00.000Z"),
+        },
+        {
+          id: "soon-monitoring",
+          status: "monitoring",
+          updatedAt: new Date("2026-07-02T22:00:00.000Z"),
+          targetArriveAt: new Date("2026-07-03T02:00:00.000Z"),
+        },
+        {
+          id: "expired-monitoring",
+          status: "monitoring",
+          updatedAt: new Date("2026-07-03T00:58:00.000Z"),
+          targetArriveAt: new Date("2026-07-03T00:30:00.000Z"),
+        },
+      ],
+      now
+    );
+
+    expect(selected?.id).toBe("soon-monitoring");
+  });
+
+  it("falls back to the most recently updated trip when no active trip exists", () => {
+    const now = new Date("2026-07-03T01:00:00.000Z");
+    const selected = selectHomeTripForDisplay(
+      [
+        {
+          id: "old-cancelled",
+          status: "cancelled",
+          updatedAt: new Date("2026-07-02T23:00:00.000Z"),
+          targetArriveAt: new Date("2026-07-03T00:30:00.000Z"),
+        },
+        {
+          id: "new-expired",
+          status: "monitoring",
+          updatedAt: new Date("2026-07-03T00:59:00.000Z"),
+          targetArriveAt: new Date("2026-07-03T00:30:00.000Z"),
+        },
+      ],
+      now
+    );
+
+    expect(selected?.id).toBe("new-expired");
   });
 });

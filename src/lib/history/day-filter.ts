@@ -45,3 +45,18 @@ export function getBeijingDayRange(value?: string | null, now = new Date()) {
     value: normalized,
   };
 }
+
+type BeijingDayRange = ReturnType<typeof getBeijingDayRange>;
+
+export function getTripHistoryDateWhere(dayRange: BeijingDayRange) {
+  return {
+    targetArriveAt: {
+      gte: dayRange.start,
+      lt: dayRange.end,
+    },
+  };
+}
+
+export function getTripHistoryOrderBy() {
+  return [{ targetArriveAt: "desc" as const }, { createdAt: "desc" as const }];
+}

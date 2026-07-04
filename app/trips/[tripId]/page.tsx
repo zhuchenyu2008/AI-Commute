@@ -13,6 +13,7 @@ import { GlassCard } from "@/components/glass-card";
 import { BufferList } from "@/components/trips/buffer-list";
 import { MonitoringActions } from "@/components/trips/monitoring-actions";
 import { RouteTimeline } from "@/components/trips/route-timeline";
+import { TripDeleteButton } from "@/components/trips/trip-delete-button";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAgentConversationHref } from "@/lib/app-routes";
 import { prisma } from "@/lib/db";
@@ -45,10 +46,23 @@ function formatTrigger(trigger?: string | null) {
   const labels: Record<string, string> = {
     manual: "手动",
     reminder: "提醒",
+    recheck: "路线复查",
     scheduler: "调度器",
   };
 
   return trigger ? labels[trigger] ?? trigger : "未知";
+}
+
+function formatRecalculationStatus(status?: string | null) {
+  const labels: Record<string, string> = {
+    completed: "已完成",
+    failed: "失败",
+    running: "运行中",
+    sent: "已发送",
+    skipped: "已跳过",
+  };
+
+  return status ? labels[status] ?? status : "未知";
 }
 
 export default async function TripDetailPage({ params }: TripPageProps) {
@@ -353,7 +367,7 @@ export default async function TripDetailPage({ params }: TripPageProps) {
               </div>
               {latestRecalculation ? (
                 <div className="mt-3 space-y-1 text-xs font-semibold uppercase tracking-[0.05em] text-[#38485d]">
-                  <p>最近复算：{latestRecalculation.status}</p>
+                  <p>最近复算：{formatRecalculationStatus(latestRecalculation.status)}</p>
                   {latestRecalculation.summary ? (
                     <p className="normal-case tracking-normal">
                       {latestRecalculation.summary}
@@ -362,7 +376,10 @@ export default async function TripDetailPage({ params }: TripPageProps) {
                   <p>触发来源：{formatTrigger(latestRecalculation.trigger)}</p>
                 </div>
               ) : null}
-              <MonitoringActions tripId={trip.id} status={trip.status} />
+              <div className="mt-4 flex flex-wrap items-start gap-2">
+                <MonitoringActions tripId={trip.id} status={trip.status} />
+                <TripDeleteButton tripId={trip.id} />
+              </div>
             </div>
           </GlassCard>
         </section>

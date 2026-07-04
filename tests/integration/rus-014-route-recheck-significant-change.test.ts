@@ -245,20 +245,36 @@ describe("RUS-014 route recheck with significant change", () => {
       data: { scheduledFor: new Date(Date.now() - 1_000) },
     });
 
-    const response = await POST(
-      new Request("http://localhost/api/scheduler/tick", {
-        method: "POST",
-        headers: { authorization: `Bearer ${secret}` },
-      })
-    );
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
+    type TickBody = {
       processed: number;
       skipped: number;
       sent: number;
       failed: number;
     };
+    let response: Response | null = null;
+    let body: TickBody | null = null;
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      response = await POST(
+        new Request("http://localhost/api/scheduler/tick", {
+          method: "POST",
+          headers: { authorization: `Bearer ${secret}` },
+        })
+      );
+      body = (await response.json()) as TickBody;
+
+      const currentRecheck = await prisma.reminderJob.findUniqueOrThrow({
+        where: { id: recheckJob.id },
+      });
+      if (currentRecheck.status !== "scheduled") {
+        break;
+      }
+    }
+
+    expect(response?.status).toBe(200);
+    if (!body) {
+      throw new Error("Scheduler tick did not return a JSON body.");
+    }
     expect(body.processed).toBeGreaterThanOrEqual(1);
     expect(body.sent).toBeGreaterThanOrEqual(1);
     expect(body.failed).toBe(0);
@@ -334,12 +350,23 @@ describe("RUS-014 route recheck with significant change", () => {
         html: expect.stringContaining("出发时间已更新"),
       })
     );
-    const routeChangeEmail = sendEmailMock.mock.calls[0][0];
     const expectedBeijingDeparture = new Intl.DateTimeFormat("zh-CN", {
       timeZone: "Asia/Shanghai",
       hour: "2-digit",
       minute: "2-digit",
     }).format(changedLatestDepartAt!);
+    const routeChangeEmail = [...sendEmailMock.mock.calls]
+      .reverse()
+      .map((call) => call[0])
+      .find(
+        (message) =>
+          typeof message?.text === "string" &&
+          message.text.includes(expectedBeijingDeparture)
+      );
+
+    if (!routeChangeEmail) {
+      throw new Error("Expected route-change email for this recheck.");
+    }
     expect(routeChangeEmail.text).toContain(expectedBeijingDeparture);
     expect(routeChangeEmail.html).toContain(expectedBeijingDeparture);
     expect(routeChangeEmail.text).toContain("Updated transit route");

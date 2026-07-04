@@ -6,6 +6,33 @@ import {
 } from "@/lib/agent/planner";
 import { prisma } from "@/lib/db";
 
+type CurrentLocationContext = {
+  name: string;
+  lngLat: string;
+  city?: string;
+};
+
+function readCurrentLocation(value: unknown): CurrentLocationContext | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const name = typeof record.name === "string" ? record.name.trim() : "";
+  const lngLat = typeof record.lngLat === "string" ? record.lngLat.trim() : "";
+  const city = typeof record.city === "string" ? record.city.trim() : "";
+
+  if (!name || !lngLat) {
+    return undefined;
+  }
+
+  return {
+    name,
+    lngLat,
+    ...(city ? { city } : {}),
+  };
+}
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
 
@@ -15,6 +42,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  const currentLocation = readCurrentLocation(body.currentLocation);
 
   if (!prompt) {
     return NextResponse.json(
@@ -40,6 +68,7 @@ export async function POST(request: Request) {
   const session = await startPlanningSession({
     userId: user.id,
     prompt,
+    currentLocation,
   });
 
   void runPlanningSession(session.id);

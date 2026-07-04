@@ -2,6 +2,8 @@ import type {
   AmapClient,
   Poi,
   PoiSearchRequest,
+  ReverseGeocodeRequest,
+  ReverseGeocodeResult,
   RouteRequest,
   RouteResult,
   WeatherRequest,
@@ -81,6 +83,21 @@ export function createMockAmapClient(): AmapClient {
           source: "mock",
           city
         }
+      };
+    },
+
+    async reverseGeocode({
+      lngLat,
+    }: ReverseGeocodeRequest): Promise<ReverseGeocodeResult> {
+      return {
+        name: "宁波外事学校",
+        address: "浙江省宁波市鄞州区",
+        city: "宁波",
+        lngLat,
+        raw: {
+          source: "mock",
+          lngLat,
+        },
       };
     },
 

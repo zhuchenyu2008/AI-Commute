@@ -26,6 +26,19 @@ type LatestMemorySummaryInput = {
   label: string;
 } | null;
 
+type HomeTripSelectionInput = {
+  status: string;
+  targetArriveAt?: Date | null;
+  updatedAt: Date;
+};
+
+const ACTIVE_HOME_TRIP_STATUSES = new Set([
+  "monitoring",
+  "planning",
+  "running",
+  "scheduled",
+]);
+
 function isExpiredTrip(input: HomeTripStatusInput, now: Date) {
   return isExpiredTripStatus({ ...input, now });
 }
@@ -90,4 +103,48 @@ export function formatLatestMemorySummary(input: LatestMemorySummaryInput) {
   }
 
   return `${formatMemoryKind(input.kind)} · ${input.label}`;
+}
+
+function compareDatesDescending(left: Date, right: Date) {
+  return right.getTime() - left.getTime();
+}
+
+function compareTripTimeAscending(
+  left?: Date | null,
+  right?: Date | null
+) {
+  if (left && right) return left.getTime() - right.getTime();
+  if (left) return -1;
+  if (right) return 1;
+  return 0;
+}
+
+export function selectHomeTripForDisplay<T extends HomeTripSelectionInput>(
+  trips: readonly T[],
+  now = new Date()
+): T | null {
+  const activeTrips = trips
+    .filter(
+      (trip) =>
+        ACTIVE_HOME_TRIP_STATUSES.has(trip.status) &&
+        !isExpiredTripStatus({ ...trip, now })
+    )
+    .sort((left, right) => {
+      const tripTimeDelta = compareTripTimeAscending(
+        left.targetArriveAt,
+        right.targetArriveAt
+      );
+
+      return tripTimeDelta || compareDatesDescending(left.updatedAt, right.updatedAt);
+    });
+
+  if (activeTrips[0]) {
+    return activeTrips[0];
+  }
+
+  return (
+    [...trips].sort((left, right) =>
+      compareDatesDescending(left.updatedAt, right.updatedAt)
+    )[0] ?? null
+  );
 }

@@ -14,6 +14,13 @@ export class MemoryCandidateAlreadyHandledError extends Error {
   }
 }
 
+export class MemoryNotFoundError extends Error {
+  constructor() {
+    super("未找到记忆");
+    this.name = "MemoryNotFoundError";
+  }
+}
+
 export async function confirmMemoryCandidate(input: {
   candidateId: string;
   userId: string;
@@ -85,4 +92,31 @@ export async function ignoreMemoryCandidate(input: {
 
     return { status: "ignored" };
   });
+}
+
+export async function deleteMemory(input: { memoryId: string; userId: string }) {
+  const deleted = await prisma.memory.deleteMany({
+    where: { id: input.memoryId, userId: input.userId },
+  });
+
+  if (deleted.count !== 1) {
+    throw new MemoryNotFoundError();
+  }
+
+  return { status: "deleted" };
+}
+
+export async function deleteMemoryCandidate(input: {
+  candidateId: string;
+  userId: string;
+}) {
+  const deleted = await prisma.memoryCandidate.deleteMany({
+    where: { id: input.candidateId, userId: input.userId },
+  });
+
+  if (deleted.count !== 1) {
+    throw new MemoryCandidateNotFoundError();
+  }
+
+  return { status: "deleted" };
 }

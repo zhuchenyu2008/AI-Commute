@@ -418,18 +418,45 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
 const SYSTEM_PROMPT = `You are a personal commute-planning AI. Current dates should be interpreted in Beijing time.
 You must plan, calculate, compare, and decide yourself. The app only exposes tools; it will not hard-code route ranking, destination extraction, or buffer minutes for you.
 Available tools include user settings, memories, all AMap POI/weather/transit/walking/bicycling tools, create_trip, and current-route update tools. You may call tools for as many rounds as needed before timeout. Weather, route results, user preferences, and memories are evidence for your decision, not fixed app rules.
+When the user does not explicitly say where to start, use the default origin from read_settings. When the user says they are starting from "我现在的位置", "当前位置", or similar, use the current-location context if it is provided.
 You should actively adapt to weather evidence. In 恶劣天气 such as heavy rain, storms, extreme heat, strong wind, or snow, compare options with less exposed walking or bicycling when possible. If you still choose 长距离步行 or bicycling in bad weather, explain why it remains acceptable, and reflect the weather impact in route rationale and bufferComponents with meaningful minutes when extra time is needed.
 Actively capture stable user preferences. When the user says phrases such as 我习惯, 我偏好, 我不喜欢, 以后都, 通常, or similar durable commute habits, call create_memory_candidate with a concise label and structured valueJson so the user can confirm it later.
 Final user-facing replies must be plain text without Markdown formatting, headings, code ticks, or list markers.`;
 
+function buildCurrentLocationContext(
+  currentLocation: StartPlanningSessionInput["currentLocation"]
+) {
+  if (!currentLocation?.name || !currentLocation.lngLat) {
+    return null;
+  }
+
+  return [
+    "当前定位上下文：",
+    `名称：${currentLocation.name}`,
+    `坐标：${currentLocation.lngLat}`,
+    currentLocation.city ? `城市：${currentLocation.city}` : null,
+    "如果用户说从我现在的位置、当前位置或类似表达出发，请使用这个位置；如果用户没有说明出发点，请继续使用 read_settings 中的默认出发点。",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 async function createInitialMessages(
-  session: { prompt: string; userId: string },
+  session: { id: string; prompt: string; userId: string },
   attempt: number
 ) {
   const memoryContext = await buildConfirmedMemoryContext(session.userId);
+  const sessionContextMessages = await prisma.agentMessage.findMany({
+    where: { agentSessionId: session.id, role: "system" },
+    orderBy: { createdAt: "asc" },
+  });
   const messages: AgentChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "system", content: memoryContext },
+    ...sessionContextMessages.map((message) => ({
+      role: "system" as const,
+      content: message.content,
+    })),
     {
       role: "user",
       content: `第 ${attempt} 次规划尝试：${session.prompt}`,
@@ -1183,10 +1210,12 @@ async function runConversationAttempt(input: {
 }
 
 export async function startPlanningSession({
+  currentLocation,
   userId,
   prompt,
 }: StartPlanningSessionInput) {
   const normalizedPrompt = normalizePrompt(prompt);
+  const currentLocationContext = buildCurrentLocationContext(currentLocation);
 
   return prisma.agentSession.create({
     data: {
@@ -1196,10 +1225,15 @@ export async function startPlanningSession({
       prompt: normalizedPrompt,
       timeoutMs: SESSION_TIMEOUT_MS,
       messages: {
-        create: {
-          role: "user",
-          content: normalizedPrompt,
-        },
+        create: [
+          ...(currentLocationContext
+            ? [{ role: "system", content: currentLocationContext }]
+            : []),
+          {
+            role: "user",
+            content: normalizedPrompt,
+          },
+        ],
       },
     },
   });
