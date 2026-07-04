@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { Trash2 } from "lucide-react";
 
 type DeleteConfirmDialogProps = {
@@ -71,9 +72,9 @@ export function DeleteConfirmDialog({
 
   const motionState = isClosing ? "closing" : "open";
 
-  return (
+  const dialog = (
     <div
-      className={`delete-confirm-layer fixed inset-0 z-[60] flex items-center justify-center bg-[#191c1e]/32 p-5 sm:p-6 ${
+      className={`delete-confirm-layer fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-[#191c1e]/18 p-5 backdrop-blur-[3px] sm:p-6 ${
         isClosing ? "delete-confirm-overlay-out" : "delete-confirm-overlay-in"
       }`}
       data-state={motionState}
@@ -81,7 +82,7 @@ export function DeleteConfirmDialog({
       <section
         aria-labelledby={titleId}
         aria-modal="true"
-        className={`w-full max-w-sm rounded-3xl border border-white/80 bg-white/95 p-5 shadow-[0_24px_80px_rgba(45,49,51,0.18)] ${
+        className={`w-full max-w-sm rounded-3xl border border-white bg-white p-5 shadow-[0_24px_80px_rgba(45,49,51,0.18)] ${
           isClosing ? "delete-confirm-panel-out" : "delete-confirm-panel-in"
         }`}
         data-state={motionState}
@@ -135,4 +136,8 @@ export function DeleteConfirmDialog({
       </section>
     </div>
   );
+
+  return typeof document === "undefined"
+    ? dialog
+    : createPortal(dialog, document.body);
 }

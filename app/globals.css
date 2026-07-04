@@ -244,21 +244,14 @@ body {
 
 .delete-confirm-panel-in {
   animation: delete-dialog-panel-in 220ms cubic-bezier(0.2, 0, 0, 1) both;
-  transform-origin: bottom center;
+  transform-origin: center;
   will-change: opacity, transform;
 }
 
 .delete-confirm-panel-out {
   animation: delete-dialog-panel-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
-  transform-origin: bottom center;
+  transform-origin: center;
   will-change: opacity, transform;
-}
-
-@media (min-width: 640px) {
-  .delete-confirm-panel-in,
-  .delete-confirm-panel-out {
-    transform-origin: center;
-  }
 }
 
 .nav-item-motion {
