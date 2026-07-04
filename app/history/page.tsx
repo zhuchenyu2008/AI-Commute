@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import {
   getBeijingDayRange,
+  getTripHistoryDetailHref,
   getTripHistoryDateWhere,
   getTripHistoryOrderBy,
 } from "@/lib/history/day-filter";
@@ -84,7 +85,11 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
               const tripTimeZone = trip.timezone;
 
               return (
-                <Link className="block" href={`/trips/${trip.id}`} key={trip.id}>
+                <Link
+                  className="block"
+                  href={getTripHistoryDetailHref(trip.id, dayRange.value)}
+                  key={trip.id}
+                >
                   <GlassCard className="p-5 transition hover:bg-white/85">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">

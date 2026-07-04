@@ -300,7 +300,7 @@ test.beforeAll(async () => {
     finalStopName: "History Stop Jul 01",
     createdAt: "2026-07-01T15:55:00.000Z",
     updatedAt: "2026-07-01T15:55:00.000Z",
-    targetArriveAt: "2026-07-01T16:20:00.000Z",
+    targetArriveAt: "2026-07-01T15:59:00.000Z",
     selectedCandidate: true,
   });
   await createTrip({
@@ -320,7 +320,7 @@ test.beforeAll(async () => {
     finalStopName: "History Stop Jul 02 Late",
     createdAt: "2026-07-02T15:59:00.000Z",
     updatedAt: "2026-07-02T15:59:00.000Z",
-    targetArriveAt: "2026-07-03T01:00:00.000Z",
+    targetArriveAt: "2026-07-02T15:59:00.000Z",
     selectedCandidate: true,
   });
   await createTrip({
@@ -446,8 +446,14 @@ test("RUS-022 filters history by Beijing calendar day and opens the selected tri
   await expect(page).toHaveURL(/date=2026-07-02/);
 
   await page.getByText(trips.historyJul2Early.title).click();
-  await expect(page).toHaveURL(new RegExp(`/trips/${trips.historyJul2Early.id}$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/trips/${trips.historyJul2Early.id}\\?historyDate=2026-07-02$`)
+  );
   await expect(page.getByRole("heading", { name: trips.historyJul2Early.title })).toBeVisible();
+
+  await page.locator('a[href="/history?date=2026-07-02"]').click();
+  await expect(page).toHaveURL(/\/history\?date=2026-07-02$/);
+  await expect(page.getByText(trips.historyJul2Early.title)).toBeVisible();
 });
 
 test("RUS-023 confirms and ignores memory candidates once", async ({ page }) => {

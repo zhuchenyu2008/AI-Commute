@@ -17,6 +17,7 @@ import { TripDeleteButton } from "@/components/trips/trip-delete-button";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAgentConversationHref } from "@/lib/app-routes";
 import { prisma } from "@/lib/db";
+import { getTripDetailHistoryHref } from "@/lib/history/day-filter";
 import {
   formatDateTimeInTimeZone,
   formatTimeInTimeZone,
@@ -31,6 +32,9 @@ import {
 type TripPageProps = {
   params: Promise<{
     tripId: string;
+  }>;
+  searchParams?: Promise<{
+    historyDate?: string;
   }>;
 };
 
@@ -66,14 +70,18 @@ function formatRecalculationStatus(status?: string | null) {
   return status ? labels[status] ?? status : "未知";
 }
 
-export default async function TripDetailPage({ params }: TripPageProps) {
+export default async function TripDetailPage({
+  params,
+  searchParams,
+}: TripPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  const { tripId } = await params;
+  const [{ tripId }, query] = await Promise.all([params, searchParams]);
+  const historyHref = getTripDetailHistoryHref(query?.historyDate);
   const trip = await prisma.trip.findFirst({
     where: { id: tripId, userId: user.id },
     include: {
@@ -211,7 +219,7 @@ export default async function TripDetailPage({ params }: TripPageProps) {
         <header className="space-y-4">
           <Link
             className="text-sm font-bold text-[#2563eb] hover:text-[#004ac6]"
-            href="/history"
+            href={historyHref}
           >
             返回历史
           </Link>

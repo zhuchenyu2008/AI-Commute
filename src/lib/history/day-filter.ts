@@ -28,9 +28,7 @@ export function getBeijingDateInputValue(now = new Date()) {
 
 function normalizeDateInput(value: string | null | undefined, now = new Date()) {
   const trimmed = value?.trim() ?? "";
-  return DATE_VALUE_PATTERN.test(trimmed)
-    ? trimmed
-    : getBeijingDateInputValue(now);
+  return isDateInputValue(trimmed) ? trimmed : getBeijingDateInputValue(now);
 }
 
 export function getBeijingDayRange(value?: string | null, now = new Date()) {
@@ -59,4 +57,25 @@ export function getTripHistoryDateWhere(dayRange: BeijingDayRange) {
 
 export function getTripHistoryOrderBy() {
   return [{ targetArriveAt: "desc" as const }, { createdAt: "desc" as const }];
+}
+
+export function isDateInputValue(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return DATE_VALUE_PATTERN.test(trimmed);
+}
+
+export function getTripHistoryDetailHref(tripId: string, dateValue: string) {
+  return `/trips/${encodeURIComponent(tripId)}?historyDate=${encodeURIComponent(
+    dateValue
+  )}`;
+}
+
+export function getTripDetailHistoryHref(historyDate?: string | null) {
+  const trimmed = historyDate?.trim() ?? "";
+
+  if (!isDateInputValue(trimmed)) {
+    return "/history";
+  }
+
+  return `/history?date=${encodeURIComponent(trimmed)}`;
 }
