@@ -1,0 +1,157 @@
+name: Validate and commit map path fix
+
+on:
+  push:
+    branches:
+      - fix/dedupe-map-reference
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply fix and regression tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          page = Path('app/trips/[tripId]/page.tsx')
+          text = page.read_text(encoding='utf-8')
+
+          import_anchor = 'import { getTripDetailHistoryHref } from "@/lib/history/day-filter";\n'
+          import_line = 'import { buildMapPath } from "@/lib/trips/map-path";\n'
+          if import_line not in text:
+              if import_anchor not in text:
+                  raise SystemExit('Could not find import anchor in trip detail page')
+              text = text.replace(import_anchor, import_anchor + import_line, 1)
+
+          old = '''  const mapPath = [
+            primaryLeg?.originName,
+            ...trip.stops.map((stop) => stop.name),
+          ].filter(Boolean);'''
+          new = '''  const mapPath = buildMapPath(
+            primaryLeg?.originName,
+            trip.stops.map((stop) => stop.name)
+          );'''
+          if old not in text:
+              raise SystemExit('Could not find mapPath construction in trip detail page')
+          text = text.replace(old, new, 1)
+          page.write_text(text, encoding='utf-8')
+
+          helper = Path('src/lib/trips/map-path.ts')
+          helper.parent.mkdir(parents=True, exist_ok=True)
+          helper.write_text('''export function buildMapPath(
+            originName: string | null | undefined,
+            stopNames: Array<string | null | undefined>
+          ) {
+            return [originName, ...stopNames].reduce<string[]>((path, name) => {
+              const normalizedName = name?.trim();
+
+              if (!normalizedName || path.at(-1) === normalizedName) {
+                return path;
+              }
+
+              path.push(normalizedName);
+              return path;
+            }, []);
+          }
+          ''', encoding='utf-8')
+
+          unit = Path('tests/unit/map-path.test.ts')
+          unit.parent.mkdir(parents=True, exist_ok=True)
+          unit.write_text('''import { describe, expect, it } from "vitest";
+          import { buildMapPath } from "@/lib/trips/map-path";
+
+          describe("buildMapPath", () => {
+            it("removes a duplicated origin already present as the first stop", () => {
+              expect(buildMapPath("金都嘉园", ["金都嘉园", "丽园南路", "博纳"])).toEqual([
+                "金都嘉园",
+                "丽园南路",
+                "博纳",
+              ]);
+            });
+
+            it("only removes adjacent duplicates so a real return visit remains visible", () => {
+              expect(buildMapPath("家", ["家", "学校", "家"])).toEqual([
+                "家",
+                "学校",
+                "家",
+              ]);
+            });
+
+            it("trims names and ignores empty values", () => {
+              expect(buildMapPath("  家  ", [null, "", " 家 ", " 公司 "])).toEqual([
+                "家",
+                "公司",
+              ]);
+            });
+          });
+          ''', encoding='utf-8')
+
+          e2e = Path('tests/e2e/rus-022-025-history-memories-home-detail.spec.ts')
+          e2e_text = e2e.read_text(encoding='utf-8')
+          anchor = '''  await expect(page.getByRole("heading", { name: trips.historyJul2Early.title })).toBeVisible();
+
+          await page.locator('a[href="/history?date=2026-07-02"]').click();'''
+          replacement = '''  await expect(page.getByRole("heading", { name: trips.historyJul2Early.title })).toBeVisible();
+
+          const mapReference = `${trips.historyJul2Early.title} Origin -> History Stop Jul 02 Early`;
+          await expect(page.getByText(mapReference, { exact: true })).toBeVisible();
+          await expect(
+            page.getByText(
+              `${trips.historyJul2Early.title} Origin -> ${trips.historyJul2Early.title} Origin`,
+              { exact: false }
+            )
+          ).toHaveCount(0);
+
+          await page.locator('a[href="/history?date=2026-07-02"]').click();'''
+          if anchor not in e2e_text:
+              raise SystemExit('Could not find RUS-022 browser-test anchor')
+          e2e.write_text(e2e_text.replace(anchor, replacement, 1), encoding='utf-8')
+          PY
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Type check
+        run: npm run lint
+
+      - name: Run unit and integration tests
+        run: npm test
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run complete browser test suite
+        run: npm run test:e2e -- --reporter=line
+
+      - name: Commit tested fix
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-dedupe-map-reference.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/trips/'[tripId]'/page.tsx src/lib/trips/map-path.ts tests/unit/map-path.test.ts tests/e2e/rus-022-025-history-memories-home-detail.spec.ts .github/workflows/fix-dedupe-map-reference.yml
+          git commit -m "Fix duplicate origins in map reference"
+          git push origin HEAD:fix/dedupe-map-reference
