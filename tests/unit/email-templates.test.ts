@@ -13,7 +13,7 @@ const baseInput = {
   targetArriveAt: new Date("2026-07-01T01:15:00.000Z"),
   totalMinutes: 40,
   routeTitle: "地铁 4 号线 -> 共享单车",
-  weatherSummary: "以行程详情为准",
+  weatherSummary: "晴, 28°C, 东风",
   detailsUrl: "https://commute.example.com/trips/trip-1",
   stopMonitoringUrl: "https://commute.example.com/trips/trip-1",
 } as const;

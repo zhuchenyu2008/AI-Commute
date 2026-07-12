@@ -30,6 +30,7 @@ const notificationEnvKeys = [
   "SMTP_SECURE",
   "EMAIL_RECIPIENT",
   "APP_BASE_URL",
+  "AMAP_API_KEY",
 ] as const;
 
 const savedNotificationEnv = new Map<string, string | undefined>();
@@ -204,8 +205,15 @@ describe("scheduler reminder processing", () => {
       },
     });
 
+    const weatherAmapClient = createWeatherAmapClient({
+      city: "上海市",
+      summary: "晴, 28°C, 东风",
+    });
     process.env.APP_BASE_URL = "localhost:3000";
-    const resultPromise = processDueReminderJobs({ now });
+    const resultPromise = processDueReminderJobs({
+      now,
+      agentOptions: { amapClient: weatherAmapClient },
+    });
 
     await expect(resultPromise).resolves.toMatchObject({
       failed: 0,
@@ -261,6 +269,20 @@ describe("scheduler reminder processing", () => {
     expect(sendEmailMock.mock.calls[0][0].html).not.toContain(
       "localhost:3000"
     );
+    expect(weatherAmapClient.reverseGeocode).toHaveBeenCalledWith({
+      lngLat: "121.520000,31.220000",
+    });
+    expect(weatherAmapClient.getWeather).toHaveBeenCalledWith({
+      city: "上海市",
+    });
+    expect(sendEmailMock.mock.calls[0][0].text).not.toContain(
+      "以行程详情为准"
+    );
+    expect(sendEmailMock.mock.calls[0][0].html).not.toContain(
+      "以行程详情为准"
+    );
+    expect(sendEmailMock.mock.calls[0][0].text).toContain("晴, 28°C, 东风");
+    expect(sendEmailMock.mock.calls[0][0].html).toContain("晴, 28°C, 东风");
     expect(sendEmailMock.mock.calls[0][0].html).toContain("查看实时地图");
     expect(sendEmailMock.mock.calls[0][0].html).toContain(
       "https://uri.amap.com/marker"
@@ -275,6 +297,59 @@ describe("scheduler reminder processing", () => {
     await expect(
       prisma.notificationLog.count({ where: { tripId: trip.id } })
     ).resolves.toBe(2);
+  });
+
+  it("keeps sending departure emails with a clear fallback when weather lookup fails", async () => {
+    const now = new Date("2000-01-01T08:30:00.000Z");
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const user = await prisma.user.create({
+      data: {
+        email: `scheduler-weather-fallback-${uniqueId}@example.com`,
+        name: "Scheduler Weather Fallback User",
+        passwordHash: "hash",
+        settings: {
+          create: {
+            defaultCity: "宁波",
+            originLngLat: "121.5230315924,29.8652491273",
+            telegramChatId: `telegram-weather-fallback-${uniqueId}`,
+            emailRecipient: "scheduler@example.com",
+          },
+        },
+      },
+    });
+    const trip = await createSchedulerTrip({
+      userId: user.id,
+      now,
+      latestDepartOffsetMinutes: 0,
+    });
+    const dueJob = await prisma.reminderJob.findFirstOrThrow({
+      where: { tripId: trip.id, kind: "depart_now", scheduledFor: now },
+    });
+    const weatherAmapClient = createWeatherAmapClient({
+      weatherError: new Error("weather unavailable"),
+    });
+
+    const result = await processDueReminderJobs({
+      now,
+      agentOptions: { amapClient: weatherAmapClient },
+    });
+
+    expect(result.failed).toBe(0);
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+    await expect(
+      prisma.reminderJob.findUniqueOrThrow({ where: { id: dueJob.id } })
+    ).resolves.toMatchObject({ status: "skipped" });
+    expect(weatherAmapClient.reverseGeocode).toHaveBeenCalledWith({
+      lngLat: "121.2,29.2",
+    });
+    expect(weatherAmapClient.getWeather).toHaveBeenCalled();
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "scheduler@example.com",
+        text: expect.stringContaining("目的地天气暂不可用"),
+        html: expect.stringContaining("目的地天气暂不可用"),
+      })
+    );
   });
 
   it("marks a trip completed after the final departure reminder finishes", async () => {
@@ -592,10 +667,14 @@ describe("scheduler reminder processing", () => {
         };
       },
     };
+    const weatherAmapClient = createWeatherAmapClient({
+      city: "杭州市",
+      summary: "多云, 26°C, 北风",
+    });
 
     const result = await processDueReminderJobs({
       now,
-      agentOptions: { amapClient, chatClient },
+      agentOptions: { amapClient: weatherAmapClient, chatClient },
     });
 
     expect(result.processed).toBeGreaterThanOrEqual(1);
@@ -638,13 +717,60 @@ describe("scheduler reminder processing", () => {
     expect(routeChangeEmail.text).toContain("17:00");
     expect(routeChangeEmail.text).not.toContain("Lumina Velocity");
     expect(routeChangeEmail.text).toContain("预计通勤时长：40 分钟");
+    expect(routeChangeEmail.text).toContain("多云, 26°C, 北风");
     expect(routeChangeEmail.html).toContain("Updated transit route");
     expect(routeChangeEmail.html).toContain("40 <span");
+    expect(routeChangeEmail.html).toContain("多云, 26°C, 北风");
     expect(routeChangeEmail.html).not.toContain("原最晚出发时间");
     expect(routeChangeEmail.html).not.toContain("Lumina Velocity");
     expect(routeChangeEmail.html).not.toContain('href="#"');
+    expect(weatherAmapClient.reverseGeocode).toHaveBeenCalledWith({
+      lngLat: "121.2,29.2",
+    });
+    expect(weatherAmapClient.getWeather).toHaveBeenCalledWith({
+      city: "杭州市",
+    });
   });
 });
+
+function createWeatherAmapClient({
+  city = "宁波市",
+  summary = "晴, 28°C, 东风",
+  reverseError,
+  weatherError,
+}: {
+  city?: string;
+  summary?: string;
+  reverseError?: Error;
+  weatherError?: Error;
+} = {}) {
+  const client = createMockAmapClient();
+
+  return {
+    ...client,
+    reverseGeocode: vi.fn(async (request: { lngLat: string }) => {
+      if (reverseError) throw reverseError;
+
+      return {
+        name: "Office",
+        address: "Test address",
+        city,
+        lngLat: request.lngLat,
+        raw: { source: "test" },
+      };
+    }),
+    getWeather: vi.fn(async (request: { city: string }) => {
+      if (weatherError) throw weatherError;
+
+      return {
+        kind: "reference" as const,
+        city: request.city,
+        summary,
+        raw: { source: "test" },
+      };
+    }),
+  };
+}
 
 async function createSchedulerUser(
   label: string,

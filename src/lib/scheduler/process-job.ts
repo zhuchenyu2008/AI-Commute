@@ -5,7 +5,9 @@ import {
   runAcceptedContinuationSession,
   type RunPlanningSessionOptions,
 } from "@/lib/agent/planner";
+import { createAmapClient, type AmapClient } from "@/lib/amap";
 import { prisma } from "@/lib/db";
+import { readEnv } from "@/lib/env";
 import { sendEmail } from "@/lib/notifications/email";
 import {
   buildDepartureReminderEmail,
@@ -224,7 +226,8 @@ function getTotalMinutes(leg: EmailTemplateLegInput) {
 function buildEmailTemplateInput(
   job: DueReminderJob,
   leg: EmailTemplateLegInput = job.leg,
-  trip: EmailTemplateTripInput = leg?.trip ?? job.trip
+  trip: EmailTemplateTripInput = leg?.trip ?? job.trip,
+  weatherSummary = "目的地天气暂不可用"
 ): CommuteEmailTemplateInput {
   const tripTitle = trip?.title ?? job.trip.title;
   const destination =
@@ -242,13 +245,43 @@ function buildEmailTemplateInput(
       leg?.targetArriveAt ?? trip?.targetArriveAt ?? job.trip.targetArriveAt,
     totalMinutes: getTotalMinutes(leg),
     routeTitle: summarizeRouteTitle(leg),
-    weatherSummary: "以行程详情为准",
+    weatherSummary,
     detailsUrl: buildAmapLink({
       destinationName: destination,
       destinationLngLat: leg?.destinationLngLat,
     }),
     stopMonitoringUrl: absoluteAppUrl(tripPath),
   };
+}
+
+async function resolveDestinationWeatherSummary(input: {
+  job: DueReminderJob;
+  leg?: EmailTemplateLegInput;
+  amapClient?: AmapClient;
+}) {
+  const amap = input.amapClient ?? createAmapClient();
+  const leg = input.leg ?? input.job.leg;
+  const fallbackCity =
+    input.job.trip.user.settings?.defaultCity?.trim() || readEnv().defaultCity;
+  let city = fallbackCity;
+
+  if (leg?.destinationLngLat) {
+    try {
+      const reverseGeocode = await amap.reverseGeocode({
+        lngLat: leg.destinationLngLat,
+      });
+      city = reverseGeocode.city.trim() || fallbackCity;
+    } catch {
+      city = fallbackCity;
+    }
+  }
+
+  try {
+    const weather = await amap.getWeather({ city });
+    return weather.summary || "目的地天气暂不可用";
+  } catch {
+    return "目的地天气暂不可用";
+  }
 }
 
 function snapshotLeg(leg: SnapshotLegInput) {
@@ -503,7 +536,8 @@ async function finishJob(input: {
 
 async function processDepartureReminderJob(
   job: DueReminderJob,
-  now: Date
+  now: Date,
+  agentOptions?: RunPlanningSessionOptions
 ): Promise<NotificationSendStatus> {
   const locked = await lockReminderJob(job.id, now);
 
@@ -512,7 +546,13 @@ async function processDepartureReminderJob(
   }
 
   const content = buildReminderText(job);
-  const email = buildDepartureReminderEmail(buildEmailTemplateInput(job));
+  const weatherSummary = await resolveDestinationWeatherSummary({
+    job,
+    amapClient: agentOptions?.amapClient,
+  });
+  const email = buildDepartureReminderEmail(
+    buildEmailTemplateInput(job, job.leg, job.trip, weatherSummary)
+  );
   const subject = email.subject;
   let recalculationId: string | null = null;
 
@@ -660,8 +700,18 @@ async function processRouteRecheckJob(
       changeMinutes,
       latestDepartAt,
     });
+    const weatherSummary = await resolveDestinationWeatherSummary({
+      job,
+      leg: currentLeg ?? job.leg,
+      amapClient: agentOptions?.amapClient,
+    });
     const email = buildRouteChangeEmail({
-      ...buildEmailTemplateInput(job, currentLeg ?? job.leg),
+      ...buildEmailTemplateInput(
+        job,
+        currentLeg ?? job.leg,
+        undefined,
+        weatherSummary
+      ),
       latestDepartAt,
       previousLatestDepartAt: before?.latestDepartAt ?? job.leg?.latestDepartAt,
       changeMinutes,
@@ -726,7 +776,7 @@ async function processReminderJob(
     return processRouteRecheckJob(job, now, agentOptions);
   }
 
-  return processDepartureReminderJob(job, now);
+  return processDepartureReminderJob(job, now, agentOptions);
 }
 
 export async function processDueReminderJobs({
