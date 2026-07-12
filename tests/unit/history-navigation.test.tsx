@@ -171,4 +171,19 @@ describe("history detail navigation", () => {
 
     expect(html).toContain('href="/history?date=2026-07-02"');
   });
+
+  it("does not duplicate the origin in the trip detail map reference", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: "user-1" });
+    prismaTripFindFirstMock.mockResolvedValue(makeTripDetail());
+
+    const detailProps = {
+      params: Promise.resolve({ tripId }),
+      searchParams: Promise.resolve({}),
+    } as Parameters<typeof TripDetailPage>[0];
+
+    const html = renderToStaticMarkup(await TripDetailPage(detailProps));
+
+    expect(html).toContain("Home -&gt; Office");
+    expect(html).not.toContain("Home -&gt; Home -&gt; Office");
+  });
 });

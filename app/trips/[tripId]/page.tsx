@@ -28,6 +28,7 @@ import {
   getMonitoringSummary,
   isTripMonitoringCancellable,
 } from "@/lib/trips/monitoring";
+import { buildMapPath } from "@/lib/trips/map-path";
 
 type TripPageProps = {
   params: Promise<{
@@ -208,10 +209,7 @@ export default async function TripDetailPage({
     selectedCandidates.length > 1
       ? `已选择 ${selectedCandidates.length} 段路线`
       : selectedCandidates[0]?.title;
-  const mapPath = [
-    primaryLeg?.originName,
-    ...trip.stops.map((stop) => stop.name),
-  ].filter(Boolean);
+  const mapPath = buildMapPath(primaryLeg?.originName, trip.stops);
 
   return (
     <AppShell active="history">
