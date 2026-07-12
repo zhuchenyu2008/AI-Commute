@@ -306,7 +306,7 @@ describe("sample-aligned UI components", () => {
   });
 
   it("centers delete confirmations as an opaque layered motion surface", () => {
-    const html = renderToStaticMarkup(
+    render(
       <DeleteConfirmDialog
         description="此操作不可恢复。"
         onCancel={() => undefined}
@@ -315,20 +315,26 @@ describe("sample-aligned UI components", () => {
         title="删除行程"
       />
     );
+    const layer = document.body.querySelector(".delete-confirm-layer");
+    const panel = screen.getByRole("dialog");
+    const layerClass = layer?.getAttribute("class") ?? "";
+    const panelClass = panel.getAttribute("class") ?? "";
 
-    expect(html).toContain("delete-confirm-layer");
-    expect(html).toContain("delete-confirm-overlay-in");
-    expect(html).toContain("delete-confirm-panel-in");
-    expect(html).toContain("z-[60]");
-    expect(html).toContain("items-center");
-    expect(html).toContain("justify-center");
-    expect(html).toContain("bg-white/95");
-    expect(html).not.toContain("items-end");
-    expect(html).not.toContain("sm:items-center");
-    expect(html).not.toContain("pb-[calc(112px+env(safe-area-inset-bottom))]");
-    expect(html).not.toContain("glass-card");
-    expect(html).not.toContain("backdrop-blur-sm");
-    expect(html).not.toContain("backdrop-blur-xl");
+    expect(layer?.parentElement).toBe(document.body);
+    expect(layerClass).toContain("delete-confirm-overlay-in");
+    expect(layerClass).toContain("z-[60]");
+    expect(layerClass).toContain("grid");
+    expect(layerClass).toContain("place-items-center");
+    expect(panelClass).toContain("delete-confirm-panel-in");
+    expect(panelClass).toContain("bg-white");
+    expect(layerClass).not.toContain("items-end");
+    expect(layerClass).not.toContain("sm:items-center");
+    expect(layerClass).not.toContain(
+      "pb-[calc(112px+env(safe-area-inset-bottom))]"
+    );
+    expect(panelClass).not.toContain("glass-card");
+    expect(layerClass).not.toContain("backdrop-blur-sm");
+    expect(layerClass).not.toContain("backdrop-blur-xl");
   });
 
   it("defines delete confirmation motion with reduced-motion fallbacks", () => {
