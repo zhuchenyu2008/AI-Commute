@@ -74,6 +74,7 @@ describe("Docker configuration", () => {
     expect(migrateBlock).toContain("./data:/app/data");
     expect(migrateBlock).toContain('restart: "no"');
     expect(webBlock).toContain('command: sh -c "npm run start"');
+    expect(webBlock).toContain("restart: unless-stopped");
     expect(webBlock).not.toContain("npx prisma migrate deploy");
     expect(webBlock).toContain("depends_on:");
     expect(webBlock).toContain("migrate:");
@@ -81,7 +82,10 @@ describe("Docker configuration", () => {
     expect(schedulerBlock).toContain("depends_on:");
     expect(schedulerBlock).toContain("migrate:");
     expect(schedulerBlock).toContain("condition: service_completed_successfully");
-    expect(telegramBlock).toContain('command: sh -c "npm run telegram:poll"');
+    expect(schedulerBlock).toContain("restart: unless-stopped");
+    expect(telegramBlock).toContain("npm run telegram:poll");
+    expect(telegramBlock).toContain("$$TELEGRAM_BOT_TOKEN");
+    expect(telegramBlock).toContain("sleep infinity");
     expect(telegramBlock).not.toContain("npx prisma migrate deploy");
     expect(telegramBlock).toContain("env_file:");
     expect(telegramBlock).toContain("- .env");
@@ -91,8 +95,8 @@ describe("Docker configuration", () => {
     expect(telegramBlock).toContain("depends_on:");
     expect(telegramBlock).toContain("migrate:");
     expect(telegramBlock).toContain("condition: service_completed_successfully");
-    expect(telegramBlock).toContain("restart: on-failure");
-    expect(telegramBlock).not.toContain("restart: unless-stopped");
+    expect(telegramBlock).toContain("restart: unless-stopped");
+    expect(telegramBlock).not.toContain("restart: on-failure");
     expect(readme).toContain("TELEGRAM_BOT_TOKEN");
     expect(readme).toContain("npm run telegram:poll");
     expect(readme).toContain("migrate");

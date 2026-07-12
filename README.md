@@ -131,8 +131,10 @@ docker compose up --build
 
 - `web`：运行 `npm run start`，暴露 `3000:3000`。
 - `scheduler`：每 60 秒执行一次 `npm run scheduler:tick`。
-- `telegram`：运行 `npm run telegram:poll`；`TELEGRAM_BOT_TOKEN` 为空时会跳过并退出，不会循环重启。
+- `telegram`：`TELEGRAM_BOT_TOKEN` 已配置时运行 `npm run telegram:poll`；为空时保持容器空闲，避免 `unless-stopped` 反复重启。
 - SQLite 数据持久化到宿主机 `./data`，容器内路径为 `/app/data`。
+
+`web`、`scheduler` 和 `telegram` 都使用 `restart: unless-stopped`，服务器重启或进程异常退出后会自动恢复；`migrate` 是一次性迁移服务，仍保持 `restart: "no"`。
 
 ## 本机一键部署
 
@@ -211,7 +213,7 @@ npm run email:test-route-change
 - `OPENAI_MODEL`：规划运行器模型名。
 - `SEED_USER_EMAIL`：种子账号邮箱。
 - `SEED_USER_PASSWORD`：种子账号密码。
-- `SCHEDULER_TICK_SECRET`：保护 scheduler tick API 的 shared secret。
+- `SCHEDULER_TICK_SECRET`：保护 scheduler tick API 的 shared secret。生产环境建议显式配置一段足够长的随机字符串；如果生产环境为空，Web 进程会自动生成临时内存密钥以避免公网 tick API 裸奔。需要外部手动调用 tick API 时，请配置固定密钥。
 - `TELEGRAM_BOT_TOKEN`：Telegram bot token。
 
 > 高德api网址：https://console.amap.com/dev/index  每月有免费配额，完全足够个人使用，本项目已限制并发为3。

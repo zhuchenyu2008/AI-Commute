@@ -1,13 +1,32 @@
+import { randomBytes } from "node:crypto";
+
 type EnvSource = Partial<Record<string, string | undefined>>;
 
-const hasValue = (value: string | undefined): value is string =>
+const hasValue = (value: string | null | undefined): value is string =>
   typeof value === "string" && value.trim().length > 0;
+
+let generatedProductionSecret: string | null = null;
+
+function getSchedulerSecret(env: EnvSource) {
+  const configuredSecret = env.SCHEDULER_TICK_SECRET?.trim();
+
+  if (hasValue(configuredSecret)) {
+    return configuredSecret;
+  }
+
+  if (env.NODE_ENV === "production") {
+    generatedProductionSecret ??= randomBytes(32).toString("base64url");
+    return generatedProductionSecret;
+  }
+
+  return null;
+}
 
 export function isSchedulerAuthorized(
   request: Request,
   env: EnvSource = process.env
 ) {
-  const secret = env.SCHEDULER_TICK_SECRET?.trim();
+  const secret = getSchedulerSecret(env);
 
   if (!hasValue(secret)) {
     return true;

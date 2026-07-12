@@ -130,8 +130,10 @@ The one-shot `migrate` service runs `npx prisma migrate deploy && npm run prisma
 
 - `web`: runs `npm run start` and exposes `3000:3000`.
 - `scheduler`: runs `npm run scheduler:tick` every 60 seconds.
-- `telegram`: runs `npm run telegram:poll`; when `TELEGRAM_BOT_TOKEN` is empty it skips and exits without restarting.
+- `telegram`: runs `npm run telegram:poll` when `TELEGRAM_BOT_TOKEN` is configured; when it is empty, the container stays idle so `unless-stopped` does not restart it repeatedly.
 - SQLite data is persisted to host path `./data`; the container path is `/app/data`.
+
+`web`, `scheduler`, and `telegram` all use `restart: unless-stopped` so they recover after server restarts or unexpected process exits. The one-shot `migrate` service still uses `restart: "no"`.
 
 ## One-Command Local Startup
 
@@ -210,7 +212,7 @@ Core configuration:
 - `OPENAI_MODEL`: Model name for the planning runner.
 - `SEED_USER_EMAIL`: Seed account email.
 - `SEED_USER_PASSWORD`: Seed account password.
-- `SCHEDULER_TICK_SECRET`: Shared secret that protects the scheduler tick API.
+- `SCHEDULER_TICK_SECRET`: Shared secret that protects the scheduler tick API. In production, set this to a long random value. If it is omitted in production, the web process generates a temporary in-memory secret so the public tick API is not left open. Configure a fixed value when you need to call the tick API externally.
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token.
 
 > AMap API console: https://console.amap.com/dev/index. It includes a monthly free quota, which is more than enough for personal use. This project limits concurrency to 3.

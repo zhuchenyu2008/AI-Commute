@@ -13,6 +13,7 @@ services:
   web:
     build: .
     command: sh -c "npm run start"
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -28,6 +29,7 @@ services:
   scheduler:
     build: .
     command: sh -c "while true; do npm run scheduler:tick; sleep 60; done"
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -40,8 +42,9 @@ services:
 
   telegram:
     build: .
-    command: sh -c "npm run telegram:poll"
-    restart: on-failure
+    command: >
+      sh -c 'if [ -z "$$TELEGRAM_BOT_TOKEN" ]; then echo "TELEGRAM_BOT_TOKEN is not configured; keeping Telegram worker idle."; sleep infinity; else npm run telegram:poll; fi'
+    restart: unless-stopped
     env_file:
       - .env
     environment:
