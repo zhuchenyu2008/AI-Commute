@@ -3,6 +3,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getShareCardLayout } from "@/lib/trips/share-image";
 import type { PublicTripShareData } from "@/lib/trips/share-types";
 
 const getPublicTripShareByTokenMock = vi.hoisted(() => vi.fn());
@@ -95,6 +96,31 @@ describe("trip share views", () => {
 
     expect(html).toContain("分享链接无效或已关闭");
     expect(html).not.toContain("revoked-token");
+  });
+
+  it("renders a bottom qr footer with brand text on the left", async () => {
+    const { TripShareCard } = await import(
+      "@/components/trips/trip-share-card"
+    );
+    const html = renderToStaticMarkup(
+      <TripShareCard
+        layout={getShareCardLayout(sampleTrip.legs[0].segments.length)}
+        qrDataUrl="data:image/png;base64,qr"
+        trip={sampleTrip}
+      />
+    );
+    const footerIndex = html.indexOf('data-share-qr-footer="true"');
+    const brandIndex = html.indexOf("AI Commute", footerIndex);
+    const hintIndex = html.indexOf("扫码查看完整行程", footerIndex);
+    const qrIndex = html.indexOf('data-share-qr="true"', footerIndex);
+
+    expect(footerIndex).toBeGreaterThan(-1);
+    expect(brandIndex).toBeGreaterThan(footerIndex);
+    expect(hintIndex).toBeGreaterThan(brandIndex);
+    expect(qrIndex).toBeGreaterThan(hintIndex);
+    expect(html).toContain("width:540px");
+    expect(html).toContain("height:540px");
+    expect(html).not.toContain("gradient");
   });
 });
 
