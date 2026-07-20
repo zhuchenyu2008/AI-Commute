@@ -65,9 +65,30 @@ async function waitForRender() {
   });
 }
 
+function supportsSystemFileShare() {
+  if (
+    typeof navigator === "undefined" ||
+    typeof File === "undefined" ||
+    typeof navigator.share !== "function" ||
+    typeof navigator.canShare !== "function"
+  ) {
+    return false;
+  }
+
+  try {
+    return navigator.canShare({
+      files: [new File([], "trip-share.png", { type: "image/png" })],
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
   const titleId = useId();
   const cardRef = useRef<HTMLElement>(null);
+  const busyRef = useRef(false);
+  const requestVersionRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -86,23 +107,38 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
     [trip]
   );
   const endpoint = `/api/trips/${tripId}/share`;
-  const canUseSystemShare =
-    typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const canUseSystemShare = supportsSystemFileShare();
+
+  function beginAction(action: Exclude<typeof busyAction, "load" | null>) {
+    if (busyRef.current) return false;
+
+    busyRef.current = true;
+    requestVersionRef.current += 1;
+    setBusyAction(action);
+    return true;
+  }
+
+  function finishAction() {
+    busyRef.current = false;
+    setBusyAction(null);
+  }
 
   useEffect(() => {
     if (!open) return;
 
     let active = true;
+    const requestVersion = ++requestVersionRef.current;
+    busyRef.current = true;
     setBusyAction("load");
     setError(null);
 
     void requestShareState(endpoint)
       .then((state) => {
-        if (!active) return;
+        if (!active || requestVersionRef.current !== requestVersion) return;
         setShareUrl(state.enabled ? state.url ?? null : null);
       })
       .catch((requestError) => {
-        if (!active) return;
+        if (!active || requestVersionRef.current !== requestVersion) return;
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -110,11 +146,17 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
         );
       })
       .finally(() => {
-        if (active) setBusyAction(null);
+        if (active && requestVersionRef.current === requestVersion) {
+          finishAction();
+        }
       });
 
     return () => {
       active = false;
+      if (requestVersionRef.current === requestVersion) {
+        requestVersionRef.current += 1;
+        busyRef.current = false;
+      }
     };
   }, [endpoint, open]);
 
@@ -141,7 +183,7 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
   }
 
   async function handleCopy() {
-    setBusyAction("copy");
+    if (!beginAction("copy")) return;
     setMessage(null);
     setError(null);
     setManualUrl(false);
@@ -160,12 +202,12 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
         copyError instanceof Error ? copyError.message : "复制公开链接失败"
       );
     } finally {
-      setBusyAction(null);
+      finishAction();
     }
   }
 
   async function createSharePng(action: "download" | "share") {
-    setBusyAction(action);
+    if (!beginAction(action)) return;
     setMessage(null);
     setError(null);
 
@@ -192,27 +234,33 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
       const fileName = buildShareImageFileName(trip.title);
 
       if (action === "share" && canUseSystemShare) {
-        const file = await dataUrlToFile(dataUrl, fileName);
-        if (!navigator.canShare || navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: trip.title });
-          setMessage("分享图已发送到系统分享面板");
-          return;
+        try {
+          const file = await dataUrlToFile(dataUrl, fileName);
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: trip.title });
+            setMessage("分享图已发送到系统分享面板");
+            return;
+          }
+        } catch {
+          // Fall through to a local PNG download when native sharing fails.
         }
       }
 
       downloadDataUrl(fileName, dataUrl);
-      setMessage("分享图已生成");
+      setMessage(
+        action === "share" ? "系统分享不可用，分享图已下载" : "分享图已生成"
+      );
     } catch (imageError) {
       setError(
         imageError instanceof Error ? imageError.message : "生成分享图失败"
       );
     } finally {
-      setBusyAction(null);
+      finishAction();
     }
   }
 
   async function handleRevoke() {
-    setBusyAction("revoke");
+    if (!beginAction("revoke")) return;
     setMessage(null);
     setError(null);
 
@@ -227,7 +275,7 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
         revokeError instanceof Error ? revokeError.message : "关闭分享失败"
       );
     } finally {
-      setBusyAction(null);
+      finishAction();
     }
   }
 
@@ -262,12 +310,14 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
         <div className="mt-5 grid gap-2">
           <ActionButton
             busy={busyAction === "copy"}
+            disabled={Boolean(busyAction)}
             icon={<Copy aria-hidden="true" className="size-4" />}
             label="复制公开链接"
             onClick={handleCopy}
           />
           <ActionButton
             busy={busyAction === "download"}
+            disabled={Boolean(busyAction)}
             icon={<Download aria-hidden="true" className="size-4" />}
             label="生成分享图"
             onClick={() => createSharePng("download")}
@@ -275,6 +325,7 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
           {canUseSystemShare ? (
             <ActionButton
               busy={busyAction === "share"}
+              disabled={Boolean(busyAction)}
               icon={<Share2 aria-hidden="true" className="size-4" />}
               label="分享图片"
               onClick={() => createSharePng("share")}
@@ -302,6 +353,7 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
                 <div className="flex shrink-0 gap-2">
                   <button
                     className="rounded-lg bg-[#f2f4f6] px-3 py-2 text-sm font-bold text-[#434655]"
+                    disabled={Boolean(busyAction)}
                     onClick={() => setConfirmingRevoke(false)}
                     type="button"
                   >
@@ -309,7 +361,7 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
                   </button>
                   <button
                     className="rounded-lg bg-[#ffdad6] px-3 py-2 text-sm font-bold text-[#93000a] disabled:opacity-60"
-                    disabled={busyAction === "revoke"}
+                    disabled={Boolean(busyAction)}
                     onClick={handleRevoke}
                     type="button"
                   >
@@ -320,6 +372,7 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
             ) : (
               <button
                 className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-[#93000a] transition hover:bg-[#ffdad6]"
+                disabled={Boolean(busyAction)}
                 onClick={() => setConfirmingRevoke(true)}
                 type="button"
               >
@@ -357,6 +410,8 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
         aria-label="分享行程"
         className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-[#c3c6d7] bg-white/80 text-[#2563eb] shadow-sm transition hover:bg-white"
         onClick={() => {
+          busyRef.current = true;
+          setBusyAction("load");
           setMessage(null);
           setError(null);
           setManualUrl(false);
@@ -403,11 +458,13 @@ async function requestShareState(endpoint: string, init?: RequestInit) {
 
 function ActionButton({
   busy,
+  disabled,
   icon,
   label,
   onClick,
 }: {
   busy: boolean;
+  disabled: boolean;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
@@ -415,7 +472,7 @@ function ActionButton({
   return (
     <button
       className="flex min-h-11 items-center gap-3 rounded-lg bg-[#f2f4f6] px-4 py-3 text-left text-sm font-bold text-[#191c1e] transition hover:bg-[#e8edff] disabled:cursor-wait disabled:opacity-60"
-      disabled={busy}
+      disabled={disabled}
       onClick={onClick}
       type="button"
     >

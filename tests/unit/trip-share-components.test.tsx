@@ -151,6 +151,33 @@ describe("trip share views", () => {
     expect(html).not.toContain("gradient");
   });
 
+  it("gives four route steps extra height and breaks long titles", async () => {
+    const { TripShareCard } = await import(
+      "@/components/trips/trip-share-card"
+    );
+    const fourSegments = Array.from({ length: 4 }, (_, index) => ({
+      mode: "walk",
+      title: `路线步骤${index + 1}`,
+      detail: `步骤说明${index + 1}`,
+      minutes: 5,
+    }));
+    const trip = {
+      ...sampleTrip,
+      title: "这是一个没有空格并且非常非常长的中文行程标题用于验证导出图片不会横向溢出",
+      legs: [{ ...sampleTrip.legs[0], segments: fourSegments }],
+    };
+    const html = renderToStaticMarkup(
+      <TripShareCard
+        layout={getShareCardLayout(fourSegments.length)}
+        qrDataUrl="data:image/png;base64,qr"
+        trip={trip}
+      />
+    );
+
+    expect(html).toContain("height:630px");
+    expect(html).toContain("break-all");
+  });
+
   it("creates and copies a public link from the share dialog", async () => {
     const writeTextMock = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", {
@@ -189,6 +216,73 @@ describe("trip share views", () => {
       );
     });
     expect(within(dialog).getByText("链接已复制")).toBeTruthy();
+  });
+
+  it("disables all share actions while the initial state is loading", async () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => undefined));
+    vi.stubGlobal("fetch", fetchMock);
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+
+    expect(
+      (within(dialog).getByRole("button", {
+        name: "复制公开链接",
+      }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    expect(
+      (within(dialog).getByRole("button", {
+        name: "生成分享图",
+      }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("disables other share actions while creating a public link", async () => {
+    let resolvePost!: (response: Response) => void;
+    const postResponse = new Promise<Response>((resolve) => {
+      resolvePost = resolve;
+    });
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") return postResponse;
+        return Response.json({ enabled: false, url: null });
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+    const copyButton = within(dialog).getByRole("button", {
+      name: "复制公开链接",
+    }) as HTMLButtonElement;
+    await waitFor(() => expect(copyButton.disabled).toBe(false));
+    fireEvent.click(copyButton);
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/trips/trip-1/share", {
+        method: "POST",
+      })
+    );
+    expect(
+      (within(dialog).getByRole("button", {
+        name: "生成分享图",
+      }) as HTMLButtonElement).disabled
+    ).toBe(true);
+
+    resolvePost(
+      Response.json({
+        enabled: true,
+        url: "http://localhost:3000/share/public-token",
+      })
+    );
   });
 
   it("generates a 1080px share PNG with the public-link QR code", async () => {
@@ -236,6 +330,87 @@ describe("trip share views", () => {
       expect(
         (toPngMock.mock.calls[0]?.[0] as HTMLElement).dataset.shareCard
       ).toBe("true");
+      expect(anchorClickMock).toHaveBeenCalled();
+    });
+  });
+
+  it("hides system image sharing without file-level canShare support", async () => {
+    vi.stubGlobal("navigator", { share: vi.fn() });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ enabled: false, url: null }))
+    );
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+    await waitFor(() =>
+      expect(
+        (within(dialog).getByRole("button", {
+          name: "复制公开链接",
+        }) as HTMLButtonElement).disabled
+      ).toBe(false)
+    );
+
+    expect(
+      within(dialog).queryByRole("button", { name: "分享图片" })
+    ).toBeNull();
+  });
+
+  it("downloads the PNG when system file sharing fails", async () => {
+    const shareMock = vi.fn(async () => {
+      throw new Error("share failed");
+    });
+    const canShareMock = vi.fn(() => true);
+    vi.stubGlobal("navigator", {
+      canShare: canShareMock,
+      share: shareMock,
+    });
+    const fetchMock = vi.fn(
+      async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (String(url).startsWith("data:image/png")) {
+          return new Response(new Blob(["png"], { type: "image/png" }));
+        }
+        if (init?.method === "POST") {
+          return Response.json({
+            enabled: true,
+            url: "http://localhost:3000/share/public-token",
+          });
+        }
+        return Response.json({ enabled: false, url: null });
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    qrToDataUrlMock.mockResolvedValue("data:image/png;base64,qr");
+    toPngMock.mockResolvedValue("data:image/png;base64,share");
+    const anchorClickMock = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+    const shareButton = await within(dialog).findByRole("button", {
+      name: "分享图片",
+    });
+    await waitFor(() =>
+      expect((shareButton as HTMLButtonElement).disabled).toBe(false)
+    );
+    fireEvent.click(shareButton);
+
+    await waitFor(() => {
+      expect(shareMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          files: [expect.any(File)],
+          title: sampleTrip.title,
+        })
+      );
       expect(anchorClickMock).toHaveBeenCalled();
     });
   });

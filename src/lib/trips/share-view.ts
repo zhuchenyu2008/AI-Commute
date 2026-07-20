@@ -1,6 +1,7 @@
 import type { PublicTripShareData } from "@/lib/trips/share-types";
 
 type Candidate = {
+  id: string;
   title: string;
   mode: string;
   routeMinutes: number;
@@ -23,6 +24,7 @@ export type TripShareSource = {
     selectedCandidate: Candidate | null;
     routeCandidates: Candidate[];
     routeSegments: Array<{
+      candidateId: string | null;
       order: number;
       mode: string;
       title: string;
@@ -45,7 +47,6 @@ export function toPublicTripShareData(
       const candidate =
         leg.selectedCandidate ??
         leg.routeCandidates.find((item) => item.selected) ??
-        leg.routeCandidates[0] ??
         null;
 
       return {
@@ -57,7 +58,8 @@ export function toPublicTripShareData(
         routeMode: candidate?.mode ?? null,
         routeMinutes: candidate?.routeMinutes ?? 0,
         bufferMinutes: candidate?.bufferMinutes ?? 0,
-        segments: [...leg.routeSegments]
+        segments: leg.routeSegments
+          .filter((segment) => segment.candidateId === candidate?.id)
           .sort((a, b) => a.order - b.order)
           .map(({ mode, title, detail, minutes }) => ({
             mode,

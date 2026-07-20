@@ -42,7 +42,7 @@ test.beforeAll(async () => {
     userId,
     rawPrompt: "今晚到城市美术馆",
     timezone: "Asia/Shanghai",
-    title: "今晚到城市美术馆",
+    title: "今晚到城市美术馆并在闭馆前完成参观然后从东门离开",
     finalStopName: "城市美术馆",
     targetArriveAt,
     stops: [
@@ -79,6 +79,42 @@ test.beforeAll(async () => {
       },
     ],
   });
+  const leg = await prisma.tripLeg.findFirstOrThrow({
+    where: { tripId: trip.id },
+    select: { id: true, selectedCandidateId: true },
+  });
+  if (!leg.selectedCandidateId) throw new Error("trip route is not selected");
+  await prisma.routeSegment.createMany({
+    data: [
+      {
+        legId: leg.id,
+        candidateId: leg.selectedCandidateId,
+        order: 1,
+        mode: "metro",
+        title: "乘坐地铁 4 号线",
+        detail: "乘坐 7 站",
+        minutes: 24,
+      },
+      {
+        legId: leg.id,
+        candidateId: leg.selectedCandidateId,
+        order: 2,
+        mode: "walk",
+        title: "从地铁站步行到美术馆",
+        detail: "从 2 号出口出站",
+        minutes: 7,
+      },
+      {
+        legId: leg.id,
+        candidateId: leg.selectedCandidateId,
+        order: 3,
+        mode: "walk",
+        title: "从美术馆东门离开",
+        detail: "按现场指引前往出口",
+        minutes: 3,
+      },
+    ],
+  });
   tripId = trip.id;
   tripTitle = trip.title;
 });
@@ -107,8 +143,7 @@ test("creates, exports, opens, and revokes a public trip share", async ({
   const width = png.readUInt32BE(16);
   const height = png.readUInt32BE(20);
   expect(width).toBe(1080);
-  expect(height).toBeGreaterThanOrEqual(1080);
-  expect(height).toBeLessThanOrEqual(1920);
+  expect(height).toBe(1260);
 
   const layout = await page.locator('[data-share-card="true"]').evaluate((card) => {
     const footer = card.querySelector<HTMLElement>(
@@ -131,8 +166,7 @@ test("creates, exports, opens, and revokes a public trip share", async ({
     };
   });
   expect(layout.cardWidth).toBe(540);
-  expect(layout.cardHeight).toBeGreaterThanOrEqual(540);
-  expect(layout.cardHeight).toBeLessThanOrEqual(960);
+  expect(layout.cardHeight).toBe(630);
   expect(Math.abs(layout.footerBottom - layout.cardBottom)).toBeLessThan(1);
   expect(layout.brandLeft).toBeLessThan(layout.qrLeft);
 

@@ -35,7 +35,7 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
           </span>
         </header>
 
-        <h1 className="mt-4 line-clamp-2 text-[30px] font-bold leading-[1.18]">
+        <h1 className="mt-4 line-clamp-2 break-all text-[30px] font-bold leading-[1.18]">
           {trip.title}
         </h1>
         {trip.finalStopName ? (

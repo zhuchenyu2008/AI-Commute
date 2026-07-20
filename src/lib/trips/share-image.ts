@@ -18,7 +18,7 @@ export function getShareCardLayout(segmentCount: number): ShareCardLayout {
     SHARE_CARD_MAX_HEIGHT,
     Math.max(
       SHARE_CARD_MIN_HEIGHT,
-      SHARE_CARD_MIN_HEIGHT + Math.max(0, visibleSegmentCount - 4) * 90
+      SHARE_CARD_MIN_HEIGHT + Math.max(0, visibleSegmentCount - 3) * 90
     )
   );
 

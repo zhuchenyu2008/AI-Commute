@@ -1058,7 +1058,7 @@ git commit -m "feat: add trip share controls"
 - Modify: `README.md`
 - Modify: `README.en.md`
 
-- [ ] **Step 1：写端到端测试**
+- [x] **Step 1：写端到端测试**
 
 测试种子创建一个用户和完整行程。浏览器登录后进入详情页：
 
@@ -1086,17 +1086,17 @@ await expect(
 
 对分享卡根节点进行截图并读取尺寸，断言宽高比位于 `1` 到 `16/9` 之间，且二维码 footer 内左侧文本节点排在二维码节点之前。
 
-- [ ] **Step 2：运行 E2E 并确认通过**
+- [x] **Step 2：运行 E2E 并确认通过**
 
 Run: `npm run test:e2e -- tests/e2e/trip-sharing.spec.ts --reporter=line --workers=1`
 
 Expected: PASS。
 
-- [ ] **Step 3：更新 README**
+- [x] **Step 3：更新 README**
 
 在功能列表增加公开只读链接、可撤销分享和带二维码 PNG；在测试命令区域增加 `trip-sharing.spec.ts` 的运行示例。中英文 README 内容保持对应。
 
-- [ ] **Step 4：运行完整验证**
+- [x] **Step 4：运行完整验证**
 
 Run: `npm test`
 
@@ -1114,7 +1114,9 @@ Run: `npm run test:e2e -- tests/e2e/trip-sharing.spec.ts --reporter=line --worke
 
 Expected: 分享 E2E 通过。
 
-- [ ] **Step 5：人工视觉检查**
+完成记录（北京时间 2026-07-20）：分享专项 25/25、TypeScript、生产构建和桌面/Pixel 7 E2E 2/2 均通过。全量 Vitest 为 408/409，唯一失败是既有 RUS-033 调度器鉴权断言（未配置密钥时实现返回 200，旧测试仍期望 401）；已按用户确认保留，不修改无关调度器逻辑。
+
+- [x] **Step 5：人工视觉检查**
 
 启动开发服务器，在 `390x844`、`768x1024` 和 `1440x1000` 视口检查：
 
@@ -1124,7 +1126,7 @@ Expected: 分享 E2E 通过。
 - 其余颜色、字体和组件风格与 AI Commute 当前页面一致。
 - 二维码四周有完整白色静区，缩放后仍清晰。
 
-- [ ] **Step 6：提交 E2E 和文档**
+- [x] **Step 6：提交 E2E 和文档**
 
 ```bash
 git add tests/e2e/trip-sharing.spec.ts README.md README.en.md
@@ -1139,4 +1141,4 @@ git commit -m "test: cover trip sharing flow"
 - PNG 宽度为 1080px，优先 1:1，最高不超过 1080x1920。
 - PNG 底部左侧为 AI Commute 品牌与扫码提示，右侧为真实二维码。
 - 参考图片的整体视觉没有进入实现。
-- 单元、集成、类型检查、构建和分享 E2E 全部通过。
+- 分享相关单元与集成测试、类型检查、构建和分享 E2E 全部通过；全量测试保留一项已确认的既有调度器断言失败。

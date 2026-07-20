@@ -46,6 +46,7 @@ describe("trip sharing domain", () => {
           latestDepartAt: new Date("2026-07-20T10:05:00.000Z"),
           targetArriveAt: new Date("2026-07-20T10:50:00.000Z"),
           selectedCandidate: {
+            id: "candidate-selected",
             title: "地铁优先",
             mode: "transit",
             routeMinutes: 37,
@@ -55,6 +56,7 @@ describe("trip sharing domain", () => {
           routeCandidates: [],
           routeSegments: [
             {
+              candidateId: "candidate-selected",
               order: 0,
               mode: "walk",
               title: "步行到地铁站",
@@ -81,12 +83,129 @@ describe("trip sharing domain", () => {
     expect(json).not.toContain("private raw response");
   });
 
+  it("projects route segments only from the selected candidate", () => {
+    const result = toPublicTripShareData({
+      title: "候选路线过滤",
+      timezone: "Asia/Shanghai",
+      targetArriveAt: null,
+      finalStopName: "公司",
+      stops: [],
+      legs: [
+        {
+          order: 0,
+          originName: "家",
+          destinationName: "公司",
+          latestDepartAt: null,
+          targetArriveAt: null,
+          selectedCandidate: null,
+          routeCandidates: [
+            {
+              id: "candidate-backup",
+              title: "备用路线",
+              mode: "taxi",
+              routeMinutes: 20,
+              bufferMinutes: 5,
+            },
+            {
+              id: "candidate-selected",
+              title: "已选路线",
+              mode: "transit",
+              routeMinutes: 30,
+              bufferMinutes: 8,
+              selected: true,
+            },
+          ],
+          routeSegments: [
+            {
+              candidateId: "candidate-backup",
+              order: 0,
+              mode: "taxi",
+              title: "不应公开的备用路线",
+              detail: null,
+              minutes: 20,
+            },
+            {
+              candidateId: "candidate-selected",
+              order: 0,
+              mode: "walk",
+              title: "步行到地铁站",
+              detail: null,
+              minutes: 5,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.legs[0]?.routeTitle).toBe("已选路线");
+    expect(result.legs[0]?.segments).toEqual([
+      {
+        mode: "walk",
+        title: "步行到地铁站",
+        detail: null,
+        minutes: 5,
+      },
+    ]);
+  });
+
+  it("projects no route details when a leg has no selected candidate", () => {
+    const result = toPublicTripShareData({
+      title: "尚未选路线",
+      timezone: "Asia/Shanghai",
+      targetArriveAt: null,
+      finalStopName: "公司",
+      stops: [],
+      legs: [
+        {
+          order: 0,
+          originName: "家",
+          destinationName: "公司",
+          latestDepartAt: null,
+          targetArriveAt: null,
+          selectedCandidate: null,
+          routeCandidates: [
+            {
+              id: "candidate-backup",
+              title: "未选择路线",
+              mode: "taxi",
+              routeMinutes: 20,
+              bufferMinutes: 5,
+            },
+          ],
+          routeSegments: [
+            {
+              candidateId: "candidate-backup",
+              order: 0,
+              mode: "taxi",
+              title: "不应公开的未选路线",
+              detail: null,
+              minutes: 20,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.legs[0]).toMatchObject({
+      routeTitle: null,
+      routeMode: null,
+      routeMinutes: 0,
+      bufferMinutes: 0,
+      segments: [],
+    });
+  });
+
   it("prefers square output and never exceeds 9:16", () => {
     expect(SHARE_CARD_LOGICAL_WIDTH * SHARE_CARD_PIXEL_RATIO).toBe(1080);
     expect(SHARE_CARD_MAX_HEIGHT * SHARE_CARD_PIXEL_RATIO).toBe(1920);
     expect(getShareCardLayout(3)).toEqual({
       logicalHeight: 540,
       visibleSegmentCount: 3,
+      hiddenSegmentCount: 0,
+    });
+    expect(getShareCardLayout(4)).toEqual({
+      logicalHeight: 630,
+      visibleSegmentCount: 4,
       hiddenSegmentCount: 0,
     });
 
