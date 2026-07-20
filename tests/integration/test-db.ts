@@ -140,6 +140,16 @@ async function ensureRouteChangeThresholdMigration() {
   }
 }
 
+async function ensureTripShareMigration() {
+  const hasTripShare = await sqliteObjectExists("table", "TripShare");
+
+  if (!hasTripShare) {
+    await executeMigration(
+      "prisma/migrations/20260720120000_trip_shares/migration.sql"
+    );
+  }
+}
+
 async function ensureUniqueTelegramChatIds() {
   const settings = await prisma.userSettings.findMany({
     where: { telegramChatId: { not: null } },
@@ -195,6 +205,7 @@ export async function ensureTestDatabase() {
       await ensureOptionalOriginMigration();
       await ensureTelegramMigrations();
       await ensureRouteChangeThresholdMigration();
+      await ensureTripShareMigration();
     }
   });
 
