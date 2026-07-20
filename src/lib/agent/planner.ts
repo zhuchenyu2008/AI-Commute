@@ -42,6 +42,7 @@ const SESSION_TIMEOUT_MS = 600000;
 const SESSION_MAX_ATTEMPTS = 2;
 const ORIGIN_REQUIRED_MESSAGE =
   "请先在设置中选择默认出发点，或在本次请求中提供出发点。";
+const LNG_LAT_PATTERN = /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/;
 
 export { AgentRunTimeoutError };
 
@@ -277,7 +278,8 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   },
   {
     name: "get_transit_route",
-    description: "Query AMap transit route.",
+    description:
+      "Query AMap transit route. origin and destination must be lng,lat coordinates; use search_poi to resolve place names first.",
     parameters: objectParameters(
       {
         origin: { type: "string" },
@@ -290,7 +292,8 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   },
   {
     name: "get_walking_route",
-    description: "Query AMap walking route.",
+    description:
+      "Query AMap walking route. origin and destination must be lng,lat coordinates; use search_poi to resolve place names first.",
     parameters: objectParameters(
       {
         origin: { type: "string" },
@@ -303,7 +306,8 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   },
   {
     name: "get_bicycling_route",
-    description: "Query AMap bicycling route.",
+    description:
+      "Query AMap bicycling route. origin and destination must be lng,lat coordinates; use search_poi to resolve place names first.",
     parameters: objectParameters(
       {
         origin: { type: "string" },
@@ -418,6 +422,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
 const SYSTEM_PROMPT = `You are a personal commute-planning AI. Current dates should be interpreted in Beijing time.
 You must plan, calculate, compare, and decide yourself. The app only exposes tools; it will not hard-code route ranking, destination extraction, or buffer minutes for you.
 Available tools include user settings, memories, all AMap POI/weather/transit/walking/bicycling tools, create_trip, and current-route update tools. You may call tools for as many rounds as needed before timeout. Weather, route results, user preferences, and memories are evidence for your decision, not fixed app rules.
+Before calling get_transit_route, get_walking_route, or get_bicycling_route, provide origin and destination as lng,lat coordinates. Never pass place names directly; call search_poi first and use a returned lngLat value.
 When the user does not explicitly say where to start, use the default origin from read_settings. When the user says they are starting from "我现在的位置", "当前位置", or similar, use the current-location context if it is provided.
 You should actively adapt to weather evidence. In 恶劣天气 such as heavy rain, storms, extreme heat, strong wind, or snow, compare options with less exposed walking or bicycling when possible. If you still choose 长距离步行 or bicycling in bad weather, explain why it remains acceptable, and reflect the weather impact in route rationale and bufferComponents with meaningful minutes when extra time is needed.
 Actively capture stable user preferences. When the user says phrases such as 我习惯, 我偏好, 我不喜欢, 以后都, 通常, or similar durable commute habits, call create_memory_candidate with a concise label and structured valueJson so the user can confirm it later.
@@ -614,6 +619,60 @@ function readOptionalArray(value: Record<string, unknown>, key: string) {
 function firstNonEmptyString(...values: Array<string | undefined>) {
   return values.find((value) => typeof value === "string" && value.trim())
     ?.trim();
+}
+
+function normalizeLngLat(value: string) {
+  const parts = value.split(",").map((part) => part.trim());
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const normalized = parts.join(",");
+  if (!LNG_LAT_PATTERN.test(normalized)) {
+    return null;
+  }
+
+  const [lng, lat] = parts.map(Number);
+  if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+    return null;
+  }
+
+  return normalized;
+}
+
+async function resolveRouteEndpoint(input: {
+  value: string;
+  label: "origin" | "destination";
+  city: string;
+  context: ToolExecutionContext;
+}) {
+  const coordinate = normalizeLngLat(input.value);
+  if (coordinate) {
+    return coordinate;
+  }
+
+  const request = {
+    keywords: input.value,
+    city: input.city,
+  };
+  const pois = await recordToolCall({
+    agentSessionId: input.context.sessionId,
+    name: "search_poi",
+    request,
+    signal: input.context.signal,
+    run: () => input.context.amap.searchPoi(request),
+  });
+  const resolved = pois
+    .map((poi) => normalizeLngLat(poi.lngLat))
+    .find((lngLat): lngLat is string => Boolean(lngLat));
+
+  if (!resolved) {
+    throw new Error(
+      `Unable to resolve route ${input.label} "${input.value}" to lng,lat coordinates.`
+    );
+  }
+
+  return resolved;
 }
 
 function normalizeBufferComponent(value: unknown): BufferComponentInput {
@@ -910,22 +969,22 @@ async function executeToolCall(
     name === "get_walking_route" ||
     name === "get_bicycling_route"
   ) {
-    const origin = firstNonEmptyString(
+    const originInput = firstNonEmptyString(
       readOptionalString(args, "origin"),
       settings.originLngLat
     );
     const request = {
-      origin: origin ?? "",
+      origin: originInput ?? "",
       destination: readString(args, "destination"),
       city: readOptionalString(args, "city") ?? settings.defaultCity,
       cityd: readOptionalString(args, "cityd") ?? settings.defaultCity,
     };
-    const route =
+    const route = (resolvedRequest: typeof request) =>
       name === "get_transit_route"
-        ? () => amap.getTransitRoute(request)
+        ? amap.getTransitRoute(resolvedRequest)
         : name === "get_walking_route"
-          ? () => amap.getWalkingRoute(request)
-          : () => amap.getBicyclingRoute(request);
+          ? amap.getWalkingRoute(resolvedRequest)
+          : amap.getBicyclingRoute(resolvedRequest);
 
     return recordToolCall({
       agentSessionId: context.sessionId,
@@ -937,7 +996,23 @@ async function executeToolCall(
           throw new Error(ORIGIN_REQUIRED_MESSAGE);
         }
 
-        return route();
+        const resolvedRequest = {
+          ...request,
+          origin: await resolveRouteEndpoint({
+            value: request.origin,
+            label: "origin",
+            city: request.city,
+            context,
+          }),
+          destination: await resolveRouteEndpoint({
+            value: request.destination,
+            label: "destination",
+            city: request.cityd,
+            context,
+          }),
+        };
+
+        return route(resolvedRequest);
       },
     });
   }

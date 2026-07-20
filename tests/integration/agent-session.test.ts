@@ -12,6 +12,7 @@ import type {
   AgentChatClient,
   AgentChatMessage,
 } from "@/lib/agent/chat-client";
+import type { AmapClient } from "@/lib/amap";
 import { createMockAmapClient } from "@/lib/amap/mock";
 import { createPlannedTrip } from "@/lib/trips/create-trip";
 import { ensureTestDatabase } from "./test-db";
@@ -536,12 +537,22 @@ describe("agent planning sessions", () => {
       prompt: "明天大雨，我习惯雨天少走路。",
     });
     let systemText = "";
+    let routeToolDescriptions: string[] = [];
     const chatClient: AgentChatClient = {
-      async complete({ messages }) {
+      async complete({ messages, tools }) {
         systemText = messages
           .filter((message) => message.role === "system")
           .map((message) => message.content)
           .join("\n");
+        routeToolDescriptions = tools
+          .filter((tool) =>
+            [
+              "get_transit_route",
+              "get_walking_route",
+              "get_bicycling_route",
+            ].includes(tool.name)
+          )
+          .map((tool) => tool.description);
         throw new Error("stop after prompt capture");
       },
     };
@@ -556,6 +567,11 @@ describe("agent planning sessions", () => {
     expect(systemText).toContain("长距离步行");
     expect(systemText).toContain("create_memory_candidate");
     expect(systemText).toContain("我习惯");
+    expect(systemText).toContain("Never pass place names directly");
+    expect(routeToolDescriptions).toHaveLength(3);
+    expect(routeToolDescriptions).toEqual(
+      routeToolDescriptions.map(() => expect.stringContaining("lng,lat"))
+    );
   });
 
   it("lets the AI choose AMap tools, route mode, and buffer details", async () => {
@@ -706,6 +722,209 @@ describe("agent planning sessions", () => {
       { category: "parking", minutes: 3 },
       { category: "venue", minutes: 4 },
     ]);
+  });
+
+  it("resolves route endpoint names to POI coordinates before calling AMap", async () => {
+    const user = await createUserWithSettings("agent-route-name-resolution");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Walk from the salon to the residential building.",
+    });
+    const baseAmapClient = createMockAmapClient();
+    const routeRequests: Array<{
+      origin: string;
+      destination: string;
+      city?: string;
+      cityd?: string;
+    }> = [];
+    const resolvingAmapClient: AmapClient = {
+      ...baseAmapClient,
+      searchPoi: vi.fn(async ({ keywords, city }) => {
+        if (keywords === "发源地造型(宝龙广场2店)") {
+          return [
+            {
+              id: "salon",
+              name: keywords,
+              address: "宝龙广场",
+              lngLat: "121.568098,29.835412",
+              raw: { city },
+            },
+          ];
+        }
+
+        if (keywords === "南都花城茶花园4号楼") {
+          return [
+            {
+              id: "residential-building",
+              name: keywords,
+              address: "南都花城茶花园",
+              lngLat: "121.528507,29.858225",
+              raw: { city },
+            },
+          ];
+        }
+
+        return [];
+      }),
+      getWalkingRoute: vi.fn(async (request) => {
+        routeRequests.push(request);
+        if (
+          request.origin !== "121.568098,29.835412" ||
+          request.destination !== "121.528507,29.858225"
+        ) {
+          throw new Error("AMap returned INVALID_PARAMS (20000)");
+        }
+
+        return {
+          mode: "walking" as const,
+          durationMinutes: 36,
+          summary: "Resolved walking route",
+          raw: { request },
+        };
+      }),
+    };
+    const chatClient: AgentChatClient = {
+      async complete({ messages }) {
+        const toolResultCount = messages.filter(
+          (message) => message.role === "tool"
+        ).length;
+
+        if (toolResultCount === 0) {
+          return {
+            message: {
+              role: "assistant",
+              content: "Query the walking route.",
+              toolCalls: [
+                {
+                  id: "call-walking-with-names",
+                  name: "get_walking_route",
+                  arguments: {
+                    origin: "发源地造型(宝龙广场2店)",
+                    destination: "南都花城茶花园4号楼",
+                    city: "宁波",
+                    cityd: "宁波",
+                  },
+                },
+              ],
+            },
+          };
+        }
+
+        return createTripToolResponse({
+          finalStopName: "南都花城茶花园4号楼",
+          destinationLngLat: "121.528507,29.858225",
+          routeMinutes: 36,
+          mode: "walking",
+        });
+      },
+    };
+
+    const result = await runPlanningSession(session.id, {
+      amapClient: resolvingAmapClient,
+      chatClient,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(resolvingAmapClient.searchPoi).toHaveBeenCalledTimes(2);
+    expect(resolvingAmapClient.searchPoi).toHaveBeenNthCalledWith(1, {
+      keywords: "发源地造型(宝龙广场2店)",
+      city: "宁波",
+    });
+    expect(resolvingAmapClient.searchPoi).toHaveBeenNthCalledWith(2, {
+      keywords: "南都花城茶花园4号楼",
+      city: "宁波",
+    });
+    expect(routeRequests).toEqual([
+      {
+        origin: "121.568098,29.835412",
+        destination: "121.528507,29.858225",
+        city: "宁波",
+        cityd: "宁波",
+      },
+    ]);
+
+    const persisted = await prisma.agentSession.findUniqueOrThrow({
+      where: { id: session.id },
+      include: { toolCalls: { orderBy: { createdAt: "asc" } } },
+    });
+    expect(
+      persisted.toolCalls.filter((toolCall) => toolCall.name === "search_poi")
+    ).toHaveLength(2);
+  });
+
+  it("fails route tools clearly when a place name has no valid POI coordinate", async () => {
+    const user = await createUserWithSettings("agent-route-name-not-found");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Take transit from an unknown place.",
+    });
+    const baseAmapClient = createMockAmapClient();
+    const getTransitRoute = vi.fn(baseAmapClient.getTransitRoute);
+    const resolvingAmapClient: AmapClient = {
+      ...baseAmapClient,
+      searchPoi: vi.fn(async () => []),
+      getTransitRoute,
+    };
+    const chatClient: AgentChatClient = {
+      async complete({ messages }) {
+        const toolResultCount = messages.filter(
+          (message) => message.role === "tool"
+        ).length;
+
+        if (toolResultCount === 0) {
+          return {
+            message: {
+              role: "assistant",
+              content: "Query transit with an unresolved origin.",
+              toolCalls: [
+                {
+                  id: "call-transit-with-unknown-origin",
+                  name: "get_transit_route",
+                  arguments: {
+                    origin: "不存在的出发地",
+                    destination: "121.528507,29.858225",
+                    city: "宁波",
+                    cityd: "宁波",
+                  },
+                },
+              ],
+            },
+          };
+        }
+
+        throw new Error("Planner should stop after route endpoint resolution fails.");
+      },
+    };
+
+    const result = await runPlanningSession(session.id, {
+      amapClient: resolvingAmapClient,
+      chatClient,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(resolvingAmapClient.searchPoi).toHaveBeenCalledWith({
+      keywords: "不存在的出发地",
+      city: "宁波",
+    });
+    expect(getTransitRoute).not.toHaveBeenCalled();
+
+    const persisted = await prisma.agentSession.findUniqueOrThrow({
+      where: { id: session.id },
+      include: {
+        toolCalls: { orderBy: { createdAt: "asc" } },
+        messages: { orderBy: { createdAt: "asc" } },
+      },
+    });
+    const routeCall = persisted.toolCalls.find(
+      (toolCall) => toolCall.name === "get_transit_route"
+    );
+    expect(routeCall).toMatchObject({ status: "failed" });
+    expect(routeCall?.error).toContain(
+      'Unable to resolve route origin "不存在的出发地" to lng,lat coordinates.'
+    );
+    expect(persisted.messages.at(-1)?.content).toContain(
+      'Unable to resolve route origin "不存在的出发地" to lng,lat coordinates.'
+    );
   });
 
   it("fails route tools clearly when no origin is available", async () => {
