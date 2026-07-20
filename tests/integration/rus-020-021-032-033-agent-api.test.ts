@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import type { AgentChatClient } from "@/lib/agent/chat-client";
@@ -34,6 +34,10 @@ describe("Batch C RUS-020/RUS-021/RUS-032/RUS-033 agent and API guards", () => {
 
   beforeEach(() => {
     getCurrentUserMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("RUS-020 rejects duplicate continuation while a session is running and rejects empty messages", async () => {
@@ -435,6 +439,7 @@ describe("Batch C RUS-020/RUS-021/RUS-032/RUS-033 agent and API guards", () => {
     );
     await expectJsonError(unknownCandidate, 404);
 
+    vi.stubEnv("SCHEDULER_TICK_SECRET", "rus-033-secret");
     const unauthorizedTick = await schedulerTick.POST(
       new Request("http://localhost/api/scheduler/tick", { method: "POST" })
     );
