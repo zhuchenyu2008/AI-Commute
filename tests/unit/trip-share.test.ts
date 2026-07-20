@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createTripShareToken } from "@/lib/trips/share-service";
 import { toPublicTripShareData } from "@/lib/trips/share-view";
+import {
+  buildShareImageFileName,
+  getShareCardLayout,
+  SHARE_CARD_LOGICAL_WIDTH,
+  SHARE_CARD_MAX_HEIGHT,
+  SHARE_CARD_PIXEL_RATIO,
+} from "@/lib/trips/share-image";
 
 describe("trip sharing domain", () => {
   it("creates an opaque 192-bit Base64URL token", () => {
@@ -72,5 +79,29 @@ describe("trip sharing domain", () => {
     expect(json).not.toContain("121,29");
     expect(json).not.toContain("private note");
     expect(json).not.toContain("private raw response");
+  });
+
+  it("prefers square output and never exceeds 9:16", () => {
+    expect(SHARE_CARD_LOGICAL_WIDTH * SHARE_CARD_PIXEL_RATIO).toBe(1080);
+    expect(SHARE_CARD_MAX_HEIGHT * SHARE_CARD_PIXEL_RATIO).toBe(1920);
+    expect(getShareCardLayout(3)).toEqual({
+      logicalHeight: 540,
+      visibleSegmentCount: 3,
+      hiddenSegmentCount: 0,
+    });
+
+    const long = getShareCardLayout(30);
+    expect(long.logicalHeight).toBeLessThanOrEqual(960);
+    expect(long.visibleSegmentCount).toBe(8);
+    expect(long.hiddenSegmentCount).toBe(22);
+  });
+
+  it("builds a filesystem-safe Beijing-date PNG name", () => {
+    expect(
+      buildShareImageFileName(
+        "家/公司:晚班",
+        new Date("2026-07-20T03:30:00.000Z")
+      )
+    ).toBe("AI-Commute-家公司晚班-2026-07-20.png");
   });
 });
