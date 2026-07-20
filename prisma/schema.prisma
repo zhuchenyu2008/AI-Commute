@@ -123,10 +123,23 @@ model Trip {
   recalculations     RecalculationLog[]
   notifications      NotificationLog[]
   telegramChatStates TelegramChatState[]
+  share              TripShare?
 
   @@index([userId])
   @@index([status])
   @@index([targetArriveAt])
+}
+
+model TripShare {
+  id        String    @id @default(cuid())
+  tripId    String    @unique
+  token     String    @unique
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  trip      Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([revokedAt])
 }
 
 model TripStop {

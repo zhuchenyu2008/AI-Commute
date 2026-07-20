@@ -11,6 +11,10 @@ describe("Prisma schema", () => {
     "prisma/migrations/20260630120000_unique_telegram_chat_id/migration.sql",
     "utf8"
   );
+  const tripShareMigration = readFileSync(
+    "prisma/migrations/20260720120000_trip_shares/migration.sql",
+    "utf8"
+  );
 
   it("models the Agent-centered multi-stop trip graph", () => {
     for (const model of [
@@ -100,5 +104,23 @@ describe("Prisma schema", () => {
       'CREATE UNIQUE INDEX "TelegramChatState_chatId_key"'
     );
     expect(telegramMigration).toContain('CREATE TABLE "TelegramBotState"');
+  });
+
+  it("stores one revocable public share per trip", () => {
+    expect(schema).toContain("model TripShare");
+    expect(schema).toContain("share              TripShare?");
+    expect(schema).toContain("tripId    String    @unique");
+    expect(schema).toContain("token     String    @unique");
+    expect(schema).toContain("revokedAt DateTime?");
+    expect(tripShareMigration).toContain('CREATE TABLE "TripShare"');
+    expect(tripShareMigration).toContain(
+      'FOREIGN KEY ("tripId") REFERENCES "Trip" ("id") ON DELETE CASCADE'
+    );
+    expect(tripShareMigration).toContain(
+      'CREATE UNIQUE INDEX "TripShare_tripId_key"'
+    );
+    expect(tripShareMigration).toContain(
+      'CREATE UNIQUE INDEX "TripShare_token_key"'
+    );
   });
 });
