@@ -14,6 +14,7 @@ import { BufferList } from "@/components/trips/buffer-list";
 import { MonitoringActions } from "@/components/trips/monitoring-actions";
 import { RouteTimeline } from "@/components/trips/route-timeline";
 import { TripDeleteButton } from "@/components/trips/trip-delete-button";
+import { TripShareButton } from "@/components/trips/trip-share-button";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAgentConversationHref } from "@/lib/app-routes";
 import { prisma } from "@/lib/db";
@@ -29,6 +30,7 @@ import {
   isTripMonitoringCancellable,
 } from "@/lib/trips/monitoring";
 import { buildMapPath } from "@/lib/trips/map-path";
+import { toPublicTripShareData } from "@/lib/trips/share-view";
 
 type TripPageProps = {
   params: Promise<{
@@ -210,6 +212,7 @@ export default async function TripDetailPage({
       ? `已选择 ${selectedCandidates.length} 段路线`
       : selectedCandidates[0]?.title;
   const mapPath = buildMapPath(primaryLeg?.originName, trip.stops);
+  const publicTrip = toPublicTripShareData(trip);
 
   return (
     <AppShell active="history">
@@ -234,15 +237,18 @@ export default async function TripDetailPage({
                 {formatDateTimeInTimeZone(trip.targetArriveAt, tripTimeZone)}
               </p>
             </div>
-            {agentSessionId ? (
-              <Link
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#2563eb] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6]"
-                href={getAgentConversationHref(agentSessionId)}
-              >
-                <Bot aria-hidden="true" className="size-4" />
-                智能体对话
-              </Link>
-            ) : null}
+            <div className="flex shrink-0 items-center gap-2">
+              <TripShareButton trip={publicTrip} tripId={trip.id} />
+              {agentSessionId ? (
+                <Link
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#2563eb] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6]"
+                  href={getAgentConversationHref(agentSessionId)}
+                >
+                  <Bot aria-hidden="true" className="size-4" />
+                  智能体对话
+                </Link>
+              ) : null}
+            </div>
           </div>
         </header>
 

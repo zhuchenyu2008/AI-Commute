@@ -1,15 +1,35 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import React from "react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getShareCardLayout } from "@/lib/trips/share-image";
 import type { PublicTripShareData } from "@/lib/trips/share-types";
 
 const getPublicTripShareByTokenMock = vi.hoisted(() => vi.fn());
+const qrToDataUrlMock = vi.hoisted(() => vi.fn());
+const toPngMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/trips/share-service", () => ({
   getPublicTripShareByToken: getPublicTripShareByTokenMock,
+}));
+
+vi.mock("qrcode", () => ({
+  default: { toDataURL: qrToDataUrlMock },
+}));
+
+vi.mock("html-to-image", () => ({
+  toPng: toPngMock,
 }));
 
 const sampleTrip: PublicTripShareData = {
@@ -52,6 +72,14 @@ const sampleTrip: PublicTripShareData = {
 describe("trip share views", () => {
   beforeEach(() => {
     getPublicTripShareByTokenMock.mockReset();
+    qrToDataUrlMock.mockReset();
+    toPngMock.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("renders public trip details without private management actions", async () => {
@@ -121,6 +149,153 @@ describe("trip share views", () => {
     expect(html).toContain("width:540px");
     expect(html).toContain("height:540px");
     expect(html).not.toContain("gradient");
+  });
+
+  it("creates and copies a public link from the share dialog", async () => {
+    const writeTextMock = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          return Response.json({
+            enabled: true,
+            url: "http://localhost:3000/share/public-token",
+          });
+        }
+        return Response.json({ enabled: false, url: null });
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "复制公开链接" })
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/trips/trip-1/share", {
+        method: "POST",
+      });
+      expect(writeTextMock).toHaveBeenCalledWith(
+        "http://localhost:3000/share/public-token"
+      );
+    });
+    expect(within(dialog).getByText("链接已复制")).toBeTruthy();
+  });
+
+  it("generates a 1080px share PNG with the public-link QR code", async () => {
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          return Response.json({
+            enabled: true,
+            url: "http://localhost:3000/share/public-token",
+          });
+        }
+        return Response.json({ enabled: false, url: null });
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    qrToDataUrlMock.mockResolvedValue("data:image/png;base64,qr");
+    toPngMock.mockResolvedValue("data:image/png;base64,share");
+    const anchorClickMock = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "生成分享图" })
+    );
+
+    await waitFor(() => {
+      expect(qrToDataUrlMock).toHaveBeenCalledWith(
+        "http://localhost:3000/share/public-token",
+        expect.objectContaining({ margin: 4, width: 192 })
+      );
+      expect(toPngMock).toHaveBeenCalledWith(
+        expect.any(HTMLElement),
+        expect.objectContaining({
+          pixelRatio: 2,
+          width: 540,
+          height: 540,
+        })
+      );
+      expect(
+        (toPngMock.mock.calls[0]?.[0] as HTMLElement).dataset.shareCard
+      ).toBe("true");
+      expect(anchorClickMock).toHaveBeenCalled();
+    });
+  });
+
+  it("confirms before closing an active share", async () => {
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "DELETE") {
+          return Response.json({ enabled: false, url: null });
+        }
+        return Response.json({
+          enabled: true,
+          url: "http://localhost:3000/share/public-token",
+        });
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: "关闭分享" })
+      ).toBeTruthy()
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "关闭分享" })
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "确认关闭" })
+    ).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "确认关闭" })
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/trips/trip-1/share", {
+        method: "DELETE",
+      });
+    });
+    expect(within(dialog).getByText("分享已关闭")).toBeTruthy();
+  });
+
+  it("mounts the share action in the trip detail header", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/trips/[tripId]/page.tsx"),
+      "utf8"
+    );
+
+    expect(source).toContain(
+      'import { TripShareButton } from "@/components/trips/trip-share-button";'
+    );
+    expect(source).toContain("const publicTrip = toPublicTripShareData(trip);");
+    expect(source).toContain(
+      "<TripShareButton trip={publicTrip} tripId={trip.id} />"
+    );
   });
 });
 

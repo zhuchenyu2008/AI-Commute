@@ -247,7 +247,7 @@ describe("sample-aligned UI components", () => {
     expect(monitoringActionIndex).toBeGreaterThan(-1);
     expect(deleteActionIndex).toBeGreaterThan(-1);
     expect(source).toMatch(
-      /<\/div>\s*\{agentSessionId \? \(\s*<Link[\s\S]*?href=\{getAgentConversationHref\(agentSessionId\)\}/
+      /<div className="flex shrink-0 items-center gap-2">[\s\S]*?<TripShareButton trip=\{publicTrip\} tripId=\{trip\.id\} \/>[\s\S]*?\{agentSessionId \? \(\s*<Link[\s\S]*?href=\{getAgentConversationHref\(agentSessionId\)\}/
     );
     expect(source).not.toContain(
       '<div className="flex flex-wrap items-center gap-2">\n              {agentSessionId ? ('

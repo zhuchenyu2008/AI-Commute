@@ -14,11 +14,8 @@ function timeLabel(value: string | null, timeZone: string) {
   return formatTimeInTimeZone(value ? new Date(value) : null, timeZone);
 }
 
-export function TripShareCard({
-  layout,
-  qrDataUrl,
-  trip,
-}: TripShareCardProps) {
+export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
+  function TripShareCard({ layout, qrDataUrl, trip }, ref) {
   const allSegments = trip.legs.flatMap((leg) => leg.segments);
   const visibleSegments = allSegments.slice(0, layout.visibleSegmentCount);
   const latestDepartAt = trip.legs[0]?.latestDepartAt ?? null;
@@ -27,6 +24,7 @@ export function TripShareCard({
     <article
       className="flex flex-col overflow-hidden bg-[#f7f9fb] text-[#191c1e]"
       data-share-card="true"
+      ref={ref}
       style={{ width: 540, height: layout.logicalHeight }}
     >
       <div className="flex min-h-0 flex-1 flex-col px-8 pb-6 pt-7">
@@ -125,8 +123,9 @@ export function TripShareCard({
         </div>
       </footer>
     </article>
-  );
-}
+    );
+  }
+);
 
 function Metric({
   icon,
