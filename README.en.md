@@ -39,6 +39,7 @@ It is useful when you want to:
 
 - **AI route planning**: Create an agent conversation from a natural-language goal, then call place, route, weather, and persistence tools to generate a trip.
 - **Multi-leg trips and buffers**: Supports route legs, weather/traffic buffers, latest departure time, and reminder scheduling.
+- **Trip sharing**: Creates a revocable public read-only link and exports a QR-coded PNG capped at a 9:16 aspect ratio.
 - **User-level settings**: Saves default city, default origin, commute preferences, Telegram Chat ID, email recipient, and route-change thresholds.
 - **Notification loop**: Includes a scheduler, Telegram worker, email templates, and notification delivery logs.
 - **Deployment friendly**: Supports one-command local startup and Docker Compose for the web app, scheduler, and Telegram worker.
@@ -241,6 +242,7 @@ Playwright E2E:
 
 ```bash
 npm run test:e2e -- tests/e2e/commute-flow.spec.ts --reporter=line --workers=1
+npm run test:e2e -- tests/e2e/trip-sharing.spec.ts --reporter=line --workers=1
 ```
 
 ---

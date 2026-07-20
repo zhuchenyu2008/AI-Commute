@@ -40,6 +40,7 @@ AI Commute 是一个面向个人通勤场景的智能规划应用。它使用 Ne
 
 - **AI 路线规划**：从自然语言目标创建 Agent 会话，调用地点、路线、天气和持久化工具生成行程。
 - **多段行程与缓冲**：支持路线分段、天气/交通缓冲、最晚出发时间和提醒计划。
+- **行程分享**：创建可撤销的公开只读链接，并生成带二维码、最长不超过 9:16 的 PNG 分享图。
 - **用户级设置**：保存默认城市、默认出发点、通勤偏好、Telegram Chat ID、邮件接收人和路线变化阈值。
 - **通知闭环**：内置 scheduler、Telegram worker、邮件模板和通知发送日志。
 - **部署友好**：支持本机一键启动，也支持 Docker Compose 同时运行 Web、scheduler 和 Telegram worker。
@@ -242,6 +243,7 @@ Playwright E2E：
 
 ```bash
 npm run test:e2e -- tests/e2e/commute-flow.spec.ts --reporter=line --workers=1
+npm run test:e2e -- tests/e2e/trip-sharing.spec.ts --reporter=line --workers=1
 ```
 
 ---
