@@ -241,7 +241,7 @@ export default async function TripDetailPage({
               <TripShareButton trip={publicTrip} tripId={trip.id} />
               {agentSessionId ? (
                 <Link
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#2563eb] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6]"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#2563eb] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6]"
                   href={getAgentConversationHref(agentSessionId)}
                 >
                   <Bot aria-hidden="true" className="size-4" />

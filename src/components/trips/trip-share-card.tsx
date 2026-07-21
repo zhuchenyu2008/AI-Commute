@@ -1,7 +1,13 @@
 import React from "react";
 import { Clock3, MapPin, Timer } from "lucide-react";
 import { formatTimeInTimeZone } from "@/lib/time-format";
-import type { ShareCardLayout } from "@/lib/trips/share-image";
+import {
+  SHARE_CARD_CONTENT_MIN_HEIGHT,
+  SHARE_CARD_FOOTER_HEIGHT,
+  SHARE_CARD_MAX_CONTENT_HEIGHT,
+  SHARE_CARD_MAX_HEIGHT,
+  type ShareCardLayout,
+} from "@/lib/trips/share-image";
 import type { PublicTripShareData } from "@/lib/trips/share-types";
 
 type TripShareCardProps = {
@@ -25,9 +31,16 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
       className="flex flex-col overflow-hidden bg-[#f7f9fb] text-[#191c1e]"
       data-share-card="true"
       ref={ref}
-      style={{ width: 540, height: layout.logicalHeight }}
+      style={{ width: 540, maxHeight: SHARE_CARD_MAX_HEIGHT }}
     >
-      <div className="flex min-h-0 flex-1 flex-col px-8 pb-6 pt-7">
+      <div
+        className="flex shrink-0 flex-col overflow-hidden px-8 pb-6 pt-7"
+        data-share-content="true"
+        style={{
+          minHeight: SHARE_CARD_CONTENT_MIN_HEIGHT,
+          maxHeight: SHARE_CARD_MAX_CONTENT_HEIGHT,
+        }}
+      >
         <header className="flex items-start justify-between gap-4">
           <p className="text-lg font-bold text-[#2563eb]">AI Commute</p>
           <span className="shrink-0 rounded-full bg-[#dcfce7] px-3 py-1 text-xs font-bold text-[#166534]">
@@ -35,13 +48,13 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
           </span>
         </header>
 
-        <h1 className="mt-4 line-clamp-2 break-all text-[30px] font-bold leading-[1.18]">
+        <h1 className="mt-4 break-all text-[30px] font-bold leading-[1.18]">
           {trip.title}
         </h1>
         {trip.finalStopName ? (
           <p className="mt-2 flex items-center gap-2 text-sm font-medium text-[#434655]">
             <MapPin aria-hidden="true" className="size-4 text-[#2563eb]" />
-            <span className="line-clamp-1">{trip.finalStopName}</span>
+            <span className="break-all">{trip.finalStopName}</span>
           </p>
         ) : null}
 
@@ -63,7 +76,7 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
           />
         </section>
 
-        <section className="mt-4 min-h-0 flex-1" aria-label="路线步骤">
+        <section className="mt-4" aria-label="路线步骤">
           {visibleSegments.length > 0 ? (
             <ol className="space-y-2.5">
               {visibleSegments.map((segment, index) => (
@@ -75,11 +88,11 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
                     <span className="size-1 rounded-full bg-[#2563eb]" />
                   </span>
                   <div className="min-w-0">
-                    <p className="line-clamp-1 text-sm font-bold">
+                    <p className="break-all text-sm font-bold">
                       {segment.title}
                     </p>
                     {segment.detail ? (
-                      <p className="line-clamp-1 text-xs text-[#737686]">
+                      <p className="break-all text-xs text-[#737686]">
                         {segment.detail}
                       </p>
                     ) : null}
@@ -89,11 +102,6 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
                   </span>
                 </li>
               ))}
-              {layout.hiddenSegmentCount > 0 ? (
-                <li className="pl-5 text-xs font-semibold text-[#737686]">
-                  另有 {layout.hiddenSegmentCount} 个路线步骤
-                </li>
-              ) : null}
             </ol>
           ) : (
             <p className="border-l-2 border-[#2563eb] py-1 pl-3 text-sm font-medium text-[#434655]">
@@ -106,6 +114,7 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
       <footer
         className="flex h-[108px] shrink-0 items-center justify-between gap-5 border-t border-[#e0e3e5] bg-white px-8"
         data-share-qr-footer="true"
+        style={{ height: SHARE_CARD_FOOTER_HEIGHT }}
       >
         <div className="min-w-0">
           <p className="text-lg font-bold text-[#191c1e]">AI Commute</p>

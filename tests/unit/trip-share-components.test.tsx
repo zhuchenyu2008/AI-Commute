@@ -147,7 +147,8 @@ describe("trip share views", () => {
     expect(hintIndex).toBeGreaterThan(brandIndex);
     expect(qrIndex).toBeGreaterThan(hintIndex);
     expect(html).toContain("width:540px");
-    expect(html).toContain("height:540px");
+    expect(html).toContain("min-height:540px");
+    expect(html).toContain("height:108px");
     expect(html).not.toContain("gradient");
   });
 
@@ -174,8 +175,9 @@ describe("trip share views", () => {
       />
     );
 
-    expect(html).toContain("height:630px");
+    expect(html).toContain("min-height:540px");
     expect(html).toContain("break-all");
+    expect(html).not.toContain("line-clamp");
   });
 
   it("creates and copies a public link from the share dialog", async () => {
@@ -324,7 +326,7 @@ describe("trip share views", () => {
         expect.objectContaining({
           pixelRatio: 2,
           width: 540,
-          height: 540,
+          height: 648,
         })
       );
       expect(

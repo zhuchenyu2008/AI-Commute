@@ -1,8 +1,12 @@
 export const SHARE_CARD_LOGICAL_WIDTH = 540;
-export const SHARE_CARD_MIN_HEIGHT = 540;
+export const SHARE_CARD_CONTENT_MIN_HEIGHT = 540;
+export const SHARE_CARD_FOOTER_HEIGHT = 108;
+export const SHARE_CARD_MIN_HEIGHT =
+  SHARE_CARD_CONTENT_MIN_HEIGHT + SHARE_CARD_FOOTER_HEIGHT;
 export const SHARE_CARD_MAX_HEIGHT = 960;
+export const SHARE_CARD_MAX_CONTENT_HEIGHT =
+  SHARE_CARD_MAX_HEIGHT - SHARE_CARD_FOOTER_HEIGHT;
 export const SHARE_CARD_PIXEL_RATIO = 2;
-export const SHARE_CARD_MAX_SEGMENTS = 8;
 
 export type ShareCardLayout = {
   logicalHeight: number;
@@ -12,17 +16,23 @@ export type ShareCardLayout = {
 
 export function getShareCardLayout(segmentCount: number): ShareCardLayout {
   const safeCount = Math.max(0, Math.floor(segmentCount));
-  const visibleSegmentCount = Math.min(safeCount, SHARE_CARD_MAX_SEGMENTS);
-  const hiddenSegmentCount = safeCount - visibleSegmentCount;
-  const logicalHeight = Math.min(
-    SHARE_CARD_MAX_HEIGHT,
-    Math.max(
-      SHARE_CARD_MIN_HEIGHT,
-      SHARE_CARD_MIN_HEIGHT + Math.max(0, visibleSegmentCount - 3) * 90
-    )
-  );
+  return {
+    logicalHeight: SHARE_CARD_MIN_HEIGHT,
+    visibleSegmentCount: safeCount,
+    hiddenSegmentCount: 0,
+  };
+}
 
-  return { logicalHeight, visibleSegmentCount, hiddenSegmentCount };
+export function getShareCardCaptureHeight(measuredHeight: number) {
+  const safeHeight =
+    Number.isFinite(measuredHeight) && measuredHeight > 0
+      ? Math.ceil(measuredHeight)
+      : SHARE_CARD_MIN_HEIGHT;
+
+  return Math.min(
+    SHARE_CARD_MAX_HEIGHT,
+    Math.max(SHARE_CARD_MIN_HEIGHT, safeHeight)
+  );
 }
 
 export function buildShareImageFileName(title: string, now = new Date()) {

@@ -3,9 +3,13 @@ import { createTripShareToken } from "@/lib/trips/share-service";
 import { toPublicTripShareData } from "@/lib/trips/share-view";
 import {
   buildShareImageFileName,
+  getShareCardCaptureHeight,
   getShareCardLayout,
+  SHARE_CARD_CONTENT_MIN_HEIGHT,
+  SHARE_CARD_FOOTER_HEIGHT,
   SHARE_CARD_LOGICAL_WIDTH,
   SHARE_CARD_MAX_HEIGHT,
+  SHARE_CARD_MIN_HEIGHT,
   SHARE_CARD_PIXEL_RATIO,
 } from "@/lib/trips/share-image";
 
@@ -198,21 +202,26 @@ describe("trip sharing domain", () => {
   it("prefers square output and never exceeds 9:16", () => {
     expect(SHARE_CARD_LOGICAL_WIDTH * SHARE_CARD_PIXEL_RATIO).toBe(1080);
     expect(SHARE_CARD_MAX_HEIGHT * SHARE_CARD_PIXEL_RATIO).toBe(1920);
+    expect(SHARE_CARD_CONTENT_MIN_HEIGHT).toBe(540);
+    expect(SHARE_CARD_FOOTER_HEIGHT).toBe(108);
+    expect(SHARE_CARD_MIN_HEIGHT).toBe(648);
     expect(getShareCardLayout(3)).toEqual({
-      logicalHeight: 540,
+      logicalHeight: 648,
       visibleSegmentCount: 3,
       hiddenSegmentCount: 0,
     });
     expect(getShareCardLayout(4)).toEqual({
-      logicalHeight: 630,
+      logicalHeight: 648,
       visibleSegmentCount: 4,
       hiddenSegmentCount: 0,
     });
 
     const long = getShareCardLayout(30);
     expect(long.logicalHeight).toBeLessThanOrEqual(960);
-    expect(long.visibleSegmentCount).toBe(8);
-    expect(long.hiddenSegmentCount).toBe(22);
+    expect(long.visibleSegmentCount).toBe(30);
+    expect(long.hiddenSegmentCount).toBe(0);
+    expect(getShareCardCaptureHeight(648)).toBe(648);
+    expect(getShareCardCaptureHeight(1200)).toBe(960);
   });
 
   it("builds a filesystem-safe Beijing-date PNG name", () => {

@@ -22,6 +22,7 @@ import { toPng } from "html-to-image";
 import { TripShareCard } from "@/components/trips/trip-share-card";
 import {
   buildShareImageFileName,
+  getShareCardCaptureHeight,
   getShareCardLayout,
   SHARE_CARD_LOGICAL_WIDTH,
   SHARE_CARD_PIXEL_RATIO,
@@ -225,11 +226,14 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
 
       if (!cardRef.current) throw new Error("分享图尚未准备完成");
 
+      const captureHeight = getShareCardCaptureHeight(
+        cardRef.current.getBoundingClientRect().height || layout.logicalHeight
+      );
       const dataUrl = await toPng(cardRef.current, {
         cacheBust: true,
         pixelRatio: SHARE_CARD_PIXEL_RATIO,
         width: SHARE_CARD_LOGICAL_WIDTH,
-        height: layout.logicalHeight,
+        height: captureHeight,
       });
       const fileName = buildShareImageFileName(trip.title);
 

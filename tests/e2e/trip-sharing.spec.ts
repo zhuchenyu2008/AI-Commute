@@ -143,30 +143,46 @@ test("creates, exports, opens, and revokes a public trip share", async ({
   const width = png.readUInt32BE(16);
   const height = png.readUInt32BE(20);
   expect(width).toBe(1080);
-  expect(height).toBe(1260);
+  expect(height).toBe(1296);
 
   const layout = await page.locator('[data-share-card="true"]').evaluate((card) => {
     const footer = card.querySelector<HTMLElement>(
       '[data-share-qr-footer="true"]'
     );
+    const content = card.querySelector<HTMLElement>(
+      '[data-share-content="true"]'
+    );
     const qr = card.querySelector<HTMLElement>('[data-share-qr="true"]');
     const brand = footer?.querySelector<HTMLElement>("p");
-    if (!footer || !qr || !brand) throw new Error("share footer is incomplete");
+    const title = content?.querySelector<HTMLElement>("h1");
+    if (!content || !footer || !qr || !brand || !title) {
+      throw new Error("share card layout is incomplete");
+    }
     const cardBox = card.getBoundingClientRect();
+    const contentBox = content.getBoundingClientRect();
     const footerBox = footer.getBoundingClientRect();
     const qrBox = qr.getBoundingClientRect();
     const brandBox = brand.getBoundingClientRect();
     return {
       cardWidth: cardBox.width,
       cardHeight: cardBox.height,
+      contentHeight: contentBox.height,
+      contentScrollHeight: content.scrollHeight,
+      footerHeight: footerBox.height,
       footerBottom: footerBox.bottom,
       cardBottom: cardBox.bottom,
       brandLeft: brandBox.left,
       qrLeft: qrBox.left,
+      titleHeight: title.clientHeight,
+      titleScrollHeight: title.scrollHeight,
     };
   });
   expect(layout.cardWidth).toBe(540);
-  expect(layout.cardHeight).toBe(630);
+  expect(layout.cardHeight).toBe(648);
+  expect(layout.contentHeight).toBe(540);
+  expect(layout.footerHeight).toBe(108);
+  expect(layout.contentScrollHeight).toBeLessThanOrEqual(540);
+  expect(layout.titleScrollHeight).toBeLessThanOrEqual(layout.titleHeight + 1);
   expect(Math.abs(layout.footerBottom - layout.cardBottom)).toBeLessThan(1);
   expect(layout.brandLeft).toBeLessThan(layout.qrLeft);
 
