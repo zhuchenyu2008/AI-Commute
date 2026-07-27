@@ -1513,7 +1513,10 @@ describe("sample-aligned UI components", () => {
       screen.getByRole("button", { name: "查看日期 2026年6月30日" })
     );
 
-    expect(screen.getByRole("dialog", { name: "选择历史日期" })).toBeTruthy();
+    const dialog = screen.getByRole("dialog", { name: "选择历史日期" });
+
+    expect(dialog).toBeTruthy();
+    expect(dialog.parentElement).toBe(document.body);
     expect(screen.getByText("2026年6月")).toBeTruthy();
   });
 

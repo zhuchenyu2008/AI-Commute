@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { getBeijingDateInputValue } from "@/lib/history/day-filter";
 
@@ -20,6 +21,14 @@ type CalendarDay = DateParts & {
   isToday: boolean;
   value: string;
 };
+
+type CalendarPosition = {
+  left: number;
+  top: number;
+};
+
+const CALENDAR_WIDTH = 320;
+const CALENDAR_GUTTER = 16;
 
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
@@ -112,7 +121,11 @@ function getDayButtonClass(day: CalendarDay) {
 export function HistoryDateFilter({ value }: HistoryDateFilterProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [calendarPosition, setCalendarPosition] =
+    useState<CalendarPosition | null>(null);
   const [selectedValue, setSelectedValue] = useState(value);
   const [visibleMonth, setVisibleMonth] = useState<DateParts>(() =>
     parseDateValue(value)
@@ -130,6 +143,85 @@ export function HistoryDateFilter({ value }: HistoryDateFilterProps) {
       hiddenInputRef.current.value = value;
     }
   }, [value]);
+
+  const updateCalendarPosition = useCallback(() => {
+    const form = formRef.current;
+    const trigger = triggerRef.current;
+
+    if (!form || !trigger) {
+      return;
+    }
+
+    const formRect = form.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    const availableWidth = Math.max(
+      0,
+      window.innerWidth - CALENDAR_GUTTER * 2
+    );
+    const calendarWidth = Math.min(CALENDAR_WIDTH, availableWidth);
+    const minLeft = window.scrollX + CALENDAR_GUTTER;
+    const maxLeft = Math.max(
+      minLeft,
+      window.scrollX + window.innerWidth - CALENDAR_GUTTER - calendarWidth
+    );
+
+    setCalendarPosition({
+      left: Math.min(
+        Math.max(formRect.left + window.scrollX, minLeft),
+        maxLeft
+      ),
+      top: triggerRect.bottom + window.scrollY + 8,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    updateCalendarPosition();
+    window.addEventListener("resize", updateCalendarPosition);
+    window.addEventListener("scroll", updateCalendarPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateCalendarPosition);
+      window.removeEventListener("scroll", updateCalendarPosition, true);
+    };
+  }, [isOpen, updateCalendarPosition]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+
+      if (
+        triggerRef.current?.contains(target) ||
+        dialogRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setIsOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
 
   function selectDate(nextValue: string) {
     setSelectedValue(nextValue);
@@ -160,18 +252,30 @@ export function HistoryDateFilter({ value }: HistoryDateFilterProps) {
         aria-expanded={isOpen}
         aria-label={`查看日期 ${formatDateLabel(selectedValue)}`}
         className="inline-flex items-center gap-2 rounded-2xl border border-white/70 bg-white/80 px-4 py-2 text-sm font-semibold text-[#191c1e] outline-none ring-primary/20 transition hover:bg-white focus:ring-4"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => {
+          if (isOpen) {
+            setIsOpen(false);
+            return;
+          }
+
+          updateCalendarPosition();
+          setIsOpen(true);
+        }}
+        ref={triggerRef}
         type="button"
       >
         <CalendarDays aria-hidden="true" className="size-4" />
         {formatDateLabel(selectedValue)}
       </button>
 
-      {isOpen ? (
+      {isOpen && calendarPosition
+        ? createPortal(
         <div
           aria-label="选择历史日期"
-          className="absolute left-0 top-12 z-20 w-80 rounded-2xl border border-white/70 bg-white/95 p-4 shadow-xl shadow-[#191c1e]/10"
+          className="absolute z-[60] w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-white/70 bg-white/95 p-4 shadow-xl shadow-[#191c1e]/10"
+          ref={dialogRef}
           role="dialog"
+          style={calendarPosition}
         >
           <div className="flex items-center justify-between gap-3">
             <button
@@ -217,8 +321,10 @@ export function HistoryDateFilter({ value }: HistoryDateFilterProps) {
               </button>
             ))}
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body
+      )
+        : null}
     </form>
   );
 }
