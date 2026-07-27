@@ -155,7 +155,8 @@ test("creates, exports, opens, and revokes a public trip share", async ({
     const qr = card.querySelector<HTMLElement>('[data-share-qr="true"]');
     const brand = footer?.querySelector<HTMLElement>("p");
     const title = content?.querySelector<HTMLElement>("h1");
-    if (!content || !footer || !qr || !brand || !title) {
+    const badge = content?.querySelector<HTMLElement>("header span");
+    if (!content || !footer || !qr || !brand || !title || !badge) {
       throw new Error("share card layout is incomplete");
     }
     const cardBox = card.getBoundingClientRect();
@@ -175,6 +176,8 @@ test("creates, exports, opens, and revokes a public trip share", async ({
       qrLeft: qrBox.left,
       titleHeight: title.clientHeight,
       titleScrollHeight: title.scrollHeight,
+      titleFontSize: Number.parseFloat(getComputedStyle(title).fontSize),
+      badgeText: badge.textContent,
     };
   });
   expect(layout.cardWidth).toBe(540);
@@ -183,6 +186,8 @@ test("creates, exports, opens, and revokes a public trip share", async ({
   expect(layout.footerHeight).toBe(108);
   expect(layout.contentScrollHeight).toBeLessThanOrEqual(540);
   expect(layout.titleScrollHeight).toBeLessThanOrEqual(layout.titleHeight + 1);
+  expect(layout.titleFontSize).toBeGreaterThan(30);
+  expect(layout.badgeText).toBe("行程分享");
   expect(Math.abs(layout.footerBottom - layout.cardBottom)).toBeLessThan(1);
   expect(layout.brandLeft).toBeLessThan(layout.qrLeft);
 

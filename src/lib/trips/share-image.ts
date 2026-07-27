@@ -14,6 +14,30 @@ export type ShareCardLayout = {
   hiddenSegmentCount: number;
 };
 
+export type ShareCardTextMetrics = {
+  titleLength: number;
+  finalStopLength: number;
+  segmentCount: number;
+  segmentTextLength: number;
+};
+
+export function getShareCardFontScale(metrics: ShareCardTextMetrics) {
+  const titleLength = Math.max(0, metrics.titleLength);
+  const finalStopLength = Math.max(0, metrics.finalStopLength);
+  const segmentCount = Math.max(0, metrics.segmentCount);
+  const segmentTextLength = Math.max(0, metrics.segmentTextLength);
+  const contentLoad =
+    titleLength * 1.2 +
+    finalStopLength * 0.8 +
+    segmentTextLength * 0.7 +
+    segmentCount * 36;
+
+  if (contentLoad <= 220) return 1.14;
+  if (contentLoad <= 400) return 1.05;
+  if (contentLoad <= 650) return 0.98;
+  return 0.9;
+}
+
 export function getShareCardLayout(segmentCount: number): ShareCardLayout {
   const safeCount = Math.max(0, Math.floor(segmentCount));
   return {

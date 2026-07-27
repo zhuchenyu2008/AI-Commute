@@ -6,6 +6,7 @@ import {
   SHARE_CARD_FOOTER_HEIGHT,
   SHARE_CARD_MAX_CONTENT_HEIGHT,
   SHARE_CARD_MAX_HEIGHT,
+  getShareCardFontScale,
   type ShareCardLayout,
 } from "@/lib/trips/share-image";
 import type { PublicTripShareData } from "@/lib/trips/share-types";
@@ -20,16 +21,31 @@ function timeLabel(value: string | null, timeZone: string) {
   return formatTimeInTimeZone(value ? new Date(value) : null, timeZone);
 }
 
+function scaledFontSize(baseSize: number, scale: number) {
+  return `${Math.round(baseSize * scale * 100) / 100}px`;
+}
+
 export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
   function TripShareCard({ layout, qrDataUrl, trip }, ref) {
   const allSegments = trip.legs.flatMap((leg) => leg.segments);
   const visibleSegments = allSegments.slice(0, layout.visibleSegmentCount);
   const latestDepartAt = trip.legs[0]?.latestDepartAt ?? null;
+  const fontScale = getShareCardFontScale({
+    titleLength: Array.from(trip.title).length,
+    finalStopLength: Array.from(trip.finalStopName ?? "").length,
+    segmentCount: allSegments.length,
+    segmentTextLength: allSegments.reduce(
+      (sum, segment) =>
+        sum + Array.from(segment.title).length + Array.from(segment.detail ?? "").length,
+      0
+    ),
+  });
 
   return (
     <article
       className="flex flex-col overflow-hidden bg-[#f7f9fb] text-[#191c1e]"
       data-share-card="true"
+      data-share-font-scale={fontScale.toFixed(2)}
       ref={ref}
       style={{ width: 540, maxHeight: SHARE_CARD_MAX_HEIGHT }}
     >
@@ -42,17 +58,31 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
         }}
       >
         <header className="flex items-start justify-between gap-4">
-          <p className="text-lg font-bold text-[#2563eb]">AI Commute</p>
-          <span className="shrink-0 rounded-full bg-[#dcfce7] px-3 py-1 text-xs font-bold text-[#166534]">
-            公开只读
+          <p
+            className="text-lg font-bold text-[#2563eb]"
+            style={{ fontSize: scaledFontSize(18, fontScale) }}
+          >
+            AI Commute
+          </p>
+          <span
+            className="shrink-0 rounded-full bg-[#dcfce7] px-3 py-1 text-xs font-bold text-[#166534]"
+            style={{ fontSize: scaledFontSize(12, fontScale) }}
+          >
+            行程分享
           </span>
         </header>
 
-        <h1 className="mt-4 break-all text-[30px] font-bold leading-[1.18]">
+        <h1
+          className="mt-4 break-all text-[30px] font-bold leading-[1.18]"
+          style={{ fontSize: scaledFontSize(30, fontScale) }}
+        >
           {trip.title}
         </h1>
         {trip.finalStopName ? (
-          <p className="mt-2 flex items-center gap-2 text-sm font-medium text-[#434655]">
+          <p
+            className="mt-2 flex items-center gap-2 text-sm font-medium text-[#434655]"
+            style={{ fontSize: scaledFontSize(14, fontScale) }}
+          >
             <MapPin aria-hidden="true" className="size-4 text-[#2563eb]" />
             <span className="break-all">{trip.finalStopName}</span>
           </p>
@@ -63,16 +93,19 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
             icon={<Clock3 aria-hidden="true" className="size-4" />}
             label="最晚出发"
             value={timeLabel(latestDepartAt, trip.timezone)}
+            fontScale={fontScale}
           />
           <Metric
             icon={<MapPin aria-hidden="true" className="size-4" />}
             label="目标到达"
             value={timeLabel(trip.targetArriveAt, trip.timezone)}
+            fontScale={fontScale}
           />
           <Metric
             icon={<Timer aria-hidden="true" className="size-4" />}
             label="预计用时"
             value={`${trip.totalMinutes} 分钟`}
+            fontScale={fontScale}
           />
         </section>
 
@@ -88,23 +121,35 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
                     <span className="size-1 rounded-full bg-[#2563eb]" />
                   </span>
                   <div className="min-w-0">
-                    <p className="break-all text-sm font-bold">
+                    <p
+                      className="break-all text-sm font-bold"
+                      style={{ fontSize: scaledFontSize(14, fontScale) }}
+                    >
                       {segment.title}
                     </p>
                     {segment.detail ? (
-                      <p className="break-all text-xs text-[#737686]">
+                      <p
+                        className="break-all text-xs text-[#737686]"
+                        style={{ fontSize: scaledFontSize(12, fontScale) }}
+                      >
                         {segment.detail}
                       </p>
                     ) : null}
                   </div>
-                  <span className="rounded-full bg-[#e8edff] px-2 py-1 text-xs font-bold text-[#3f465c]">
+                  <span
+                    className="rounded-full bg-[#e8edff] px-2 py-1 text-xs font-bold text-[#3f465c]"
+                    style={{ fontSize: scaledFontSize(12, fontScale) }}
+                  >
                     {segment.minutes} 分钟
                   </span>
                 </li>
               ))}
             </ol>
           ) : (
-            <p className="border-l-2 border-[#2563eb] py-1 pl-3 text-sm font-medium text-[#434655]">
+            <p
+              className="border-l-2 border-[#2563eb] py-1 pl-3 text-sm font-medium text-[#434655]"
+              style={{ fontSize: scaledFontSize(14, fontScale) }}
+            >
               路线详情待完善
             </p>
           )}
@@ -137,21 +182,29 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
 );
 
 function Metric({
+  fontScale,
   icon,
   label,
   value,
 }: {
+  fontScale: number;
   icon: React.ReactNode;
   label: string;
   value: string;
 }) {
   return (
     <div className="min-w-0">
-      <p className="flex items-center gap-1 text-[11px] font-medium text-[#737686]">
+      <p
+        className="flex items-center gap-1 text-[11px] font-medium text-[#737686]"
+        style={{ fontSize: scaledFontSize(11, fontScale) }}
+      >
         {icon}
         {label}
       </p>
-      <p className="mt-1 break-words text-sm font-bold text-[#191c1e]">
+      <p
+        className="mt-1 break-words text-sm font-bold text-[#191c1e]"
+        style={{ fontSize: scaledFontSize(14, fontScale) }}
+      >
         {value}
       </p>
     </div>

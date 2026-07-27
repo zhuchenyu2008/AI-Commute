@@ -4,6 +4,7 @@ import { toPublicTripShareData } from "@/lib/trips/share-view";
 import {
   buildShareImageFileName,
   getShareCardCaptureHeight,
+  getShareCardFontScale,
   getShareCardLayout,
   SHARE_CARD_CONTENT_MIN_HEIGHT,
   SHARE_CARD_FOOTER_HEIGHT,
@@ -231,5 +232,24 @@ describe("trip sharing domain", () => {
         new Date("2026-07-20T03:30:00.000Z")
       )
     ).toBe("AI-Commute-家公司晚班-2026-07-20.png");
+  });
+
+  it("adapts share-card typography to content density", () => {
+    const spacious = getShareCardFontScale({
+      titleLength: 12,
+      finalStopLength: 8,
+      segmentCount: 2,
+      segmentTextLength: 36,
+    });
+    const dense = getShareCardFontScale({
+      titleLength: 48,
+      finalStopLength: 20,
+      segmentCount: 12,
+      segmentTextLength: 520,
+    });
+
+    expect(spacious).toBeGreaterThan(1);
+    expect(dense).toBeLessThan(spacious);
+    expect(dense).toBeGreaterThanOrEqual(0.9);
   });
 });

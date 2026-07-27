@@ -143,6 +143,9 @@ describe("trip share views", () => {
     const qrIndex = html.indexOf('data-share-qr="true"', footerIndex);
 
     expect(footerIndex).toBeGreaterThan(-1);
+    expect(html).toContain("行程分享");
+    expect(html).not.toContain("公开只读");
+    expect(html).toContain('data-share-font-scale="1.14"');
     expect(brandIndex).toBeGreaterThan(footerIndex);
     expect(hintIndex).toBeGreaterThan(brandIndex);
     expect(qrIndex).toBeGreaterThan(hintIndex);
