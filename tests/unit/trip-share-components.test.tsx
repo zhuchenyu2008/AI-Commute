@@ -152,6 +152,13 @@ describe("trip share views", () => {
     expect(html).toContain("width:540px");
     expect(html).toContain("min-height:540px");
     expect(html).toContain("height:108px");
+    expect(html).toContain('data-share-route-list="true"');
+    expect(html).toContain('data-share-metric-label="true"');
+    expect(html).toContain('data-share-metric-value="true"');
+    expect(html).toContain('data-share-segment-title="true"');
+    expect(html).toContain('data-share-segment-detail="true"');
+    expect(html).toContain('data-share-segment-minutes="true"');
+    expect(html).toContain("line-height:1.45");
     expect(html).not.toContain("gradient");
   });
 

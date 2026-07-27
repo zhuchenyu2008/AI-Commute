@@ -156,7 +156,48 @@ test("creates, exports, opens, and revokes a public trip share", async ({
     const brand = footer?.querySelector<HTMLElement>("p");
     const title = content?.querySelector<HTMLElement>("h1");
     const badge = content?.querySelector<HTMLElement>("header span");
-    if (!content || !footer || !qr || !brand || !title || !badge) {
+    const metricParagraphs = content?.querySelectorAll<HTMLElement>(
+      "section:first-of-type p"
+    );
+    const metricLabel =
+      content?.querySelector<HTMLElement>('[data-share-metric-label="true"]') ??
+      metricParagraphs?.item(0);
+    const metricValue =
+      content?.querySelector<HTMLElement>('[data-share-metric-value="true"]') ??
+      metricParagraphs?.item(1);
+    const firstRouteItem = content?.querySelector<HTMLElement>("ol > li");
+    const routeParagraphs =
+      firstRouteItem?.querySelectorAll<HTMLElement>("div > p");
+    const segmentTitle =
+      content?.querySelector<HTMLElement>('[data-share-segment-title="true"]') ??
+      routeParagraphs?.item(0);
+    const segmentDetail =
+      content?.querySelector<HTMLElement>('[data-share-segment-detail="true"]') ??
+      routeParagraphs?.item(1);
+    const segmentMinutes =
+      content?.querySelector<HTMLElement>('[data-share-segment-minutes="true"]') ??
+      firstRouteItem?.querySelector<HTMLElement>(":scope > span:last-child");
+    const markedRouteItems = content?.querySelectorAll<HTMLElement>(
+      '[data-share-route-item="true"]'
+    );
+    const routeItems = markedRouteItems?.length
+      ? markedRouteItems
+      : content?.querySelectorAll<HTMLElement>("ol > li");
+    const lastRouteItem = routeItems?.item((routeItems?.length ?? 0) - 1);
+    if (
+      !content ||
+      !footer ||
+      !qr ||
+      !brand ||
+      !title ||
+      !badge ||
+      !metricLabel ||
+      !metricValue ||
+      !segmentTitle ||
+      !segmentDetail ||
+      !segmentMinutes ||
+      !lastRouteItem
+    ) {
       throw new Error("share card layout is incomplete");
     }
     const cardBox = card.getBoundingClientRect();
@@ -164,10 +205,12 @@ test("creates, exports, opens, and revokes a public trip share", async ({
     const footerBox = footer.getBoundingClientRect();
     const qrBox = qr.getBoundingClientRect();
     const brandBox = brand.getBoundingClientRect();
+    const lastRouteBox = lastRouteItem.getBoundingClientRect();
     return {
       cardWidth: cardBox.width,
       cardHeight: cardBox.height,
       contentHeight: contentBox.height,
+      contentBottom: contentBox.bottom,
       contentScrollHeight: content.scrollHeight,
       footerHeight: footerBox.height,
       footerBottom: footerBox.bottom,
@@ -178,6 +221,25 @@ test("creates, exports, opens, and revokes a public trip share", async ({
       titleScrollHeight: title.scrollHeight,
       titleFontSize: Number.parseFloat(getComputedStyle(title).fontSize),
       badgeText: badge.textContent,
+      fontScale: Number.parseFloat(
+        card.getAttribute("data-share-font-scale") ?? "1"
+      ),
+      metricLabelFontSize: Number.parseFloat(
+        getComputedStyle(metricLabel).fontSize
+      ),
+      metricValueFontSize: Number.parseFloat(
+        getComputedStyle(metricValue).fontSize
+      ),
+      segmentTitleFontSize: Number.parseFloat(
+        getComputedStyle(segmentTitle).fontSize
+      ),
+      segmentDetailFontSize: Number.parseFloat(
+        getComputedStyle(segmentDetail).fontSize
+      ),
+      segmentMinutesFontSize: Number.parseFloat(
+        getComputedStyle(segmentMinutes).fontSize
+      ),
+      lastRouteBottom: lastRouteBox.bottom,
     };
   });
   expect(layout.cardWidth).toBe(540);
@@ -188,6 +250,12 @@ test("creates, exports, opens, and revokes a public trip share", async ({
   expect(layout.titleScrollHeight).toBeLessThanOrEqual(layout.titleHeight + 1);
   expect(layout.titleFontSize).toBeGreaterThan(30);
   expect(layout.badgeText).toBe("行程分享");
+  expect(layout.contentBottom - layout.lastRouteBottom).toBeLessThanOrEqual(40);
+  expect(layout.metricLabelFontSize).toBeGreaterThanOrEqual(15);
+  expect(layout.metricValueFontSize).toBeGreaterThanOrEqual(18);
+  expect(layout.segmentDetailFontSize).toBeGreaterThanOrEqual(15);
+  expect(layout.segmentMinutesFontSize).toBeGreaterThanOrEqual(15);
+  expect(layout.segmentTitleFontSize).toBeCloseTo(14 * layout.fontScale, 1);
   expect(Math.abs(layout.footerBottom - layout.cardBottom)).toBeLessThan(1);
   expect(layout.brandLeft).toBeLessThan(layout.qrLeft);
 

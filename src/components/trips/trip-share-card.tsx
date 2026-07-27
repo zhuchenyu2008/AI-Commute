@@ -90,31 +90,38 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
 
         <section className="mt-5 grid grid-cols-3 gap-3 border-y border-[#e0e3e5] py-4">
           <Metric
-            icon={<Clock3 aria-hidden="true" className="size-4" />}
+            icon={<Clock3 aria-hidden="true" className="size-[18px]" />}
             label="最晚出发"
             value={timeLabel(latestDepartAt, trip.timezone)}
             fontScale={fontScale}
           />
           <Metric
-            icon={<MapPin aria-hidden="true" className="size-4" />}
+            icon={<MapPin aria-hidden="true" className="size-[18px]" />}
             label="目标到达"
             value={timeLabel(trip.targetArriveAt, trip.timezone)}
             fontScale={fontScale}
           />
           <Metric
-            icon={<Timer aria-hidden="true" className="size-4" />}
+            icon={<Timer aria-hidden="true" className="size-[18px]" />}
             label="预计用时"
             value={`${trip.totalMinutes} 分钟`}
             fontScale={fontScale}
           />
         </section>
 
-        <section className="mt-4" aria-label="路线步骤">
+        <section
+          className="mt-4 flex min-h-0 flex-1 flex-col"
+          aria-label="路线步骤"
+        >
           {visibleSegments.length > 0 ? (
-            <ol className="space-y-2.5">
+            <ol
+              className="flex min-h-0 flex-1 flex-col justify-between gap-4"
+              data-share-route-list="true"
+            >
               {visibleSegments.map((segment, index) => (
                 <li
                   className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-start gap-2"
+                  data-share-route-item="true"
                   key={`${segment.title}-${index}`}
                 >
                   <span className="mt-1.5 flex size-3 items-center justify-center rounded-full border-2 border-[#2563eb] bg-white">
@@ -123,6 +130,7 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
                   <div className="min-w-0">
                     <p
                       className="break-all text-sm font-bold"
+                      data-share-segment-title="true"
                       style={{ fontSize: scaledFontSize(14, fontScale) }}
                     >
                       {segment.title}
@@ -130,7 +138,11 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
                     {segment.detail ? (
                       <p
                         className="break-all text-xs text-[#737686]"
-                        style={{ fontSize: scaledFontSize(12, fontScale) }}
+                        data-share-segment-detail="true"
+                        style={{
+                          fontSize: scaledFontSize(14, fontScale),
+                          lineHeight: 1.45,
+                        }}
                       >
                         {segment.detail}
                       </p>
@@ -138,7 +150,11 @@ export const TripShareCard = React.forwardRef<HTMLElement, TripShareCardProps>(
                   </div>
                   <span
                     className="rounded-full bg-[#e8edff] px-2 py-1 text-xs font-bold text-[#3f465c]"
-                    style={{ fontSize: scaledFontSize(12, fontScale) }}
+                    data-share-segment-minutes="true"
+                    style={{
+                      fontSize: scaledFontSize(14, fontScale),
+                      lineHeight: 1.2,
+                    }}
                   >
                     {segment.minutes} 分钟
                   </span>
@@ -196,14 +212,22 @@ function Metric({
     <div className="min-w-0">
       <p
         className="flex items-center gap-1 text-[11px] font-medium text-[#737686]"
-        style={{ fontSize: scaledFontSize(11, fontScale) }}
+        data-share-metric-label="true"
+        style={{
+          fontSize: scaledFontSize(14, fontScale),
+          lineHeight: 1.35,
+        }}
       >
         {icon}
         {label}
       </p>
       <p
         className="mt-1 break-words text-sm font-bold text-[#191c1e]"
-        style={{ fontSize: scaledFontSize(14, fontScale) }}
+        data-share-metric-value="true"
+        style={{
+          fontSize: scaledFontSize(18, fontScale),
+          lineHeight: 1.25,
+        }}
       >
         {value}
       </p>
