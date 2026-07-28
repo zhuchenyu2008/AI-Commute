@@ -327,6 +327,7 @@ function buildPlainText(
 ) {
   const detailsUrl = normalizeHttpUrl(input.detailsUrl);
   const stopMonitoringUrl = normalizeHttpUrl(input.stopMonitoringUrl);
+  const destinationAddress = input.destinationAddress?.trim();
   const lines = [
     brand,
     heading,
@@ -336,7 +337,7 @@ function buildPlainText(
     `预计到达时间：${formatBeijingTime(input.targetArriveAt)}`,
     `预计通勤时长：${formatMinutes(input.totalMinutes)}`,
     `目的地：${input.destinationName}`,
-    `地址：${valueOrPending(input.destinationAddress)}`,
+    destinationAddress ? `地址：${destinationAddress}` : null,
     `路线：${valueOrPending(input.routeTitle)}`,
     `天气：${valueOrPending(input.weatherSummary)}`,
     detailsUrl ? `查看实时地图：${detailsUrl}` : null,
@@ -414,6 +415,10 @@ function durationHtml(minutes: number | null | undefined) {
 function routeChangeDetailCard(input: CommuteEmailTemplateInput) {
   const route = routeParts(input.routeTitle);
   const weather = weatherParts(input.weatherSummary);
+  const destinationAddress = input.destinationAddress?.trim();
+  const destinationAddressHtml = destinationAddress
+    ? `<div style="margin-top:2px;font-size:14px;line-height:20px;color:${MUTED};word-break:break-word;">${escapeHtml(destinationAddress)}</div>`
+    : "";
   const routeLine = route.secondary
     ? `${escapeHtml(route.primary)} <span style="color:${MUTED};padding:0 8px;">→</span><span>${escapeHtml(route.secondary)}</span>`
     : escapeHtml(route.primary);
@@ -427,7 +432,7 @@ function routeChangeDetailCard(input: CommuteEmailTemplateInput) {
               <td valign="top" style="padding:0 12px 0 0;">
                 <div style="font-size:12px;line-height:16px;color:${MUTED};letter-spacing:0.05em;">目的地</div>
                 <div style="margin-top:6px;font-size:18px;line-height:28px;font-weight:700;color:${TEXT};word-break:break-word;">${escapeHtml(input.destinationName)}</div>
-                <div style="margin-top:2px;font-size:14px;line-height:20px;color:${MUTED};word-break:break-word;">${escapeHtml(valueOrPending(input.destinationAddress))}</div>
+                ${destinationAddressHtml}
               </td>
               <td width="48" valign="top" align="right" style="width:48px;padding:0;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;border-radius:9999px;background:#eef0f3;">
@@ -477,9 +482,27 @@ export function buildRouteChangeEmail(
   input: RouteChangeEmailTemplateInput
 ): BuiltEmailTemplate {
   const appName = resolveAppName(input);
-  const roundedChangeMinutes = Math.round(Math.abs(input.changeMinutes));
-  const textChange = `受路况影响，出发时间变化约 ${roundedChangeMinutes} 分钟`;
-  const badgeChange = `受路况影响，出发时间延后 ${roundedChangeMinutes} 分钟`;
+  const departureChangeMinutes =
+    input.latestDepartAt && input.previousLatestDepartAt
+      ? (input.latestDepartAt.getTime() -
+          input.previousLatestDepartAt.getTime()) /
+        60_000
+      : null;
+  const hasDirectionalDepartureChange =
+    departureChangeMinutes !== null &&
+    Math.abs(departureChangeMinutes) >= 0.5;
+  const roundedChangeMinutes =
+    hasDirectionalDepartureChange && departureChangeMinutes !== null
+      ? Math.round(Math.abs(departureChangeMinutes))
+      : Math.round(Math.abs(input.changeMinutes));
+  const changeDirection =
+    !hasDirectionalDepartureChange || departureChangeMinutes === null
+      ? "变化约"
+      : departureChangeMinutes < 0
+        ? "提前"
+        : "延后";
+  const textChange = `受路况影响，出发时间${changeDirection} ${roundedChangeMinutes} 分钟`;
+  const badgeChange = textChange;
   const previousDepartAt = formatBeijingTime(input.previousLatestDepartAt);
   const plainTextIntro = [
     textChange,

@@ -48,6 +48,9 @@ export async function findDueReminderJobs(
       leg: {
         include: {
           selectedCandidate: true,
+          toStop: {
+            select: { address: true },
+          },
           routeSegments: {
             select: { title: true, order: true },
             orderBy: { order: "asc" },

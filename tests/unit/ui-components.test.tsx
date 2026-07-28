@@ -247,10 +247,10 @@ describe("sample-aligned UI components", () => {
     expect(monitoringActionIndex).toBeGreaterThan(-1);
     expect(deleteActionIndex).toBeGreaterThan(-1);
     expect(source).toMatch(
-      /<div className="flex shrink-0 items-center gap-2">[\s\S]*?<TripShareButton trip=\{publicTrip\} tripId=\{trip\.id\} \/>[\s\S]*?\{agentSessionId \? \(\s*<Link[\s\S]*?href=\{getAgentConversationHref\(agentSessionId\)\}/
+      /<div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">[\s\S]*?<TripShareButton trip=\{publicTrip\} tripId=\{trip\.id\} \/>[\s\S]*?\{agentSessionId \? \(\s*<Link[\s\S]*?href=\{getAgentConversationHref\(agentSessionId\)\}/
     );
     expect(source).toContain(
-      'className="inline-flex items-center justify-center gap-2 rounded-full bg-[#2563eb] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6]"'
+      'className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#2563eb] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6] md:flex-none"'
     );
     expect(source).not.toContain(
       '<div className="flex flex-wrap items-center gap-2">\n              {agentSessionId ? ('

@@ -73,6 +73,9 @@ type EmailTemplateLegInput = {
     title: string;
     order: number;
   }[];
+  toStop?: {
+    address: string | null;
+  } | null;
 } | null | undefined;
 type EmailTemplateTripInput = {
   title: string;
@@ -240,6 +243,7 @@ function buildEmailTemplateInput(
   return {
     tripTitle,
     destinationName: destination,
+    destinationAddress: leg?.toStop?.address,
     latestDepartAt: leg?.latestDepartAt ?? job.scheduledFor,
     targetArriveAt:
       leg?.targetArriveAt ?? trip?.targetArriveAt ?? job.trip.targetArriveAt,
@@ -352,6 +356,9 @@ async function loadCurrentLegForEmail(job: DueReminderJob, legOrder?: number) {
         },
       },
       selectedCandidate: true,
+      toStop: {
+        select: { address: true },
+      },
       routeSegments: {
         select: { title: true, order: true },
         orderBy: { order: "asc" },

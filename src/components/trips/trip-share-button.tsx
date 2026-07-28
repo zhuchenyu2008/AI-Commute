@@ -164,6 +164,20 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
   useEffect(() => {
     if (!open) return;
 
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !busyAction) {
         setOpen(false);
@@ -284,11 +298,18 @@ export function TripShareButton({ tripId, trip }: TripShareButtonProps) {
   }
 
   const dialog = open ? (
-    <div className="fixed inset-0 z-[70] grid place-items-end overflow-y-auto bg-[#191c1e]/20 p-4 backdrop-blur-[3px] sm:place-items-center sm:p-6">
+    <div
+      className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto overscroll-none bg-[#191c1e]/20 p-4 backdrop-blur-[3px] sm:p-6"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          setOpen(false);
+        }
+      }}
+    >
       <section
         aria-labelledby={titleId}
         aria-modal="true"
-        className="w-full max-w-md rounded-lg border border-white bg-white p-5 shadow-[0_24px_80px_rgba(45,49,51,0.18)]"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-white bg-white p-5 shadow-[0_24px_80px_rgba(45,49,51,0.18)] sm:max-h-[calc(100dvh-3rem)]"
         role="dialog"
       >
         <div className="flex items-center justify-between gap-4">

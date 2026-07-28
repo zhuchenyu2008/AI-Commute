@@ -237,11 +237,11 @@ export default async function TripDetailPage({
                 {formatDateTimeInTimeZone(trip.targetArriveAt, tripTimeZone)}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
               <TripShareButton trip={publicTrip} tripId={trip.id} />
               {agentSessionId ? (
                 <Link
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#2563eb] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6]"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#2563eb] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#004ac6] md:flex-none"
                   href={getAgentConversationHref(agentSessionId)}
                 >
                   <Bot aria-hidden="true" className="size-4" />

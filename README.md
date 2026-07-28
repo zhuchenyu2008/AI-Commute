@@ -212,6 +212,7 @@ npm run email:test-route-change
 - `OPENAI_API_KEY`：兼容 OpenAI 的规划运行器凭证；留空时使用内置 fallback planner。
 - `OPENAI_BASE_URL`：兼容 OpenAI 接口的自定义 base URL。
 - `OPENAI_MODEL`：规划运行器模型名。
+- `APP_BASE_URL`：站点的公网根地址，例如 `https://commute.example.com`；用于分享二维码和通知链接。生产环境建议显式配置，避免反向代理后的内部 `localhost` 地址出现在分享内容中。
 - `SEED_USER_EMAIL`：种子账号邮箱。
 - `SEED_USER_PASSWORD`：种子账号密码。
 - `SCHEDULER_TICK_SECRET`：保护 scheduler tick API 的 shared secret。生产环境建议显式配置一段足够长的随机字符串；如果生产环境为空，Web 进程会自动生成临时内存密钥以避免公网 tick API 裸奔。需要外部手动调用 tick API 时，请配置固定密钥。

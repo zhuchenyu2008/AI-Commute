@@ -20,6 +20,7 @@ describe("trip share owner API", () => {
   });
 
   beforeEach(async () => {
+    delete process.env.APP_BASE_URL;
     getCurrentUserMock.mockReset();
     await prisma.user.deleteMany({
       where: { email: { startsWith: "trip-share-api-" } },
@@ -87,6 +88,41 @@ describe("trip share owner API", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: expect.any(String),
     });
+  });
+
+  it("uses the configured public origin instead of an internal localhost URL", async () => {
+    process.env.APP_BASE_URL = "https://commute.example.com/internal-path";
+    const { POST } = await import("@app/api/trips/[tripId]/share/route");
+    const { owner, trip } = await createOwnerTrip("public-origin");
+    getCurrentUserMock.mockResolvedValue(owner);
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/trips/x/share"),
+      { params: Promise.resolve({ tripId: trip.id }) }
+    );
+    const body = await response.json();
+
+    expect(body.url).toMatch(/^https:\/\/commute\.example\.com\/share\//);
+    delete process.env.APP_BASE_URL;
+  });
+
+  it("uses reverse-proxy headers when no public origin is configured", async () => {
+    const { POST } = await import("@app/api/trips/[tripId]/share/route");
+    const { owner, trip } = await createOwnerTrip("forwarded-origin");
+    getCurrentUserMock.mockResolvedValue(owner);
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/trips/x/share", {
+        headers: {
+          "x-forwarded-host": "commute.example.net",
+          "x-forwarded-proto": "https",
+        },
+      }),
+      { params: Promise.resolve({ tripId: trip.id }) }
+    );
+    const body = await response.json();
+
+    expect(body.url).toMatch(/^https:\/\/commute\.example\.net\/share\//);
   });
 
   it("returns 404 for another user's trip", async () => {

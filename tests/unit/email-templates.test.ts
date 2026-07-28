@@ -154,8 +154,7 @@ describe("email templates", () => {
     expect(email.subject).toBe("通勤时间已变化：家到科技园");
     expect(email.text).not.toContain("Lumina Velocity");
     expect(email.text).toContain("出发时间已更新");
-    expect(email.text).toContain("变化约 5 分钟");
-    expect(email.text).toContain("受路况影响，出发时间变化约 5 分钟");
+    expect(email.text).toContain("受路况影响，出发时间延后 5 分钟");
     expect(email.text).toContain("原最晚出发时间：08:30");
     expect(email.text).toContain("最晚出发时间：08:35");
     expect(email.html).toContain("出发时间已更新");
@@ -168,6 +167,34 @@ describe("email templates", () => {
     expect(email.html).toContain("行程提醒");
     expect(email.html).not.toContain("Lumina Velocity");
     expect(email.html).not.toContain("原最晚出发时间");
+  });
+
+  it("labels an earlier departure time as 提前 and uses the actual departure delta", () => {
+    const email = buildRouteChangeEmail({
+      ...baseInput,
+      latestDepartAt: new Date("2026-07-01T00:02:00.000Z"),
+      previousLatestDepartAt: new Date("2026-07-01T00:10:00.000Z"),
+      changeMinutes: 12,
+      destinationAddress: null,
+    });
+
+    expect(email.text).toContain("受路况影响，出发时间提前 8 分钟");
+    expect(email.html).toContain("受路况影响，出发时间提前 8 分钟");
+    expect(email.html).not.toContain("出发时间延后 8 分钟");
+    expect(email.html).not.toContain("待确认");
+  });
+
+  it("falls back to the measured route change when the departure time is unchanged", () => {
+    const unchangedDeparture = new Date("2026-07-01T00:35:00.000Z");
+    const email = buildRouteChangeEmail({
+      ...baseInput,
+      latestDepartAt: unchangedDeparture,
+      previousLatestDepartAt: unchangedDeparture,
+      changeMinutes: 7.6,
+    });
+
+    expect(email.text).toContain("受路况影响，出发时间变化约 8 分钟");
+    expect(email.text).not.toContain("变化约 0 分钟");
   });
 
   it("escapes user-controlled text in html while keeping readable plain text", () => {

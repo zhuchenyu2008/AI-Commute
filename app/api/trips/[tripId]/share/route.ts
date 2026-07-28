@@ -12,6 +12,48 @@ type RouteContext = {
 };
 
 function buildPublicUrl(request: Request, token: string) {
+  const configuredBaseUrl = process.env.APP_BASE_URL?.trim();
+
+  if (configuredBaseUrl) {
+    try {
+      const parsedBaseUrl = new URL(configuredBaseUrl);
+
+      if (
+        parsedBaseUrl.protocol === "http:" ||
+        parsedBaseUrl.protocol === "https:"
+      ) {
+        return new URL(`/share/${token}`, parsedBaseUrl).toString();
+      }
+    } catch {
+      // Fall back to the public proxy headers or the request URL.
+    }
+  }
+
+  const forwardedHost = request.headers
+    .get("x-forwarded-host")
+    ?.split(",")[0]
+    ?.trim();
+  const requestHost = forwardedHost || request.headers.get("host")?.trim();
+
+  if (requestHost) {
+    const forwardedProtocol = request.headers
+      .get("x-forwarded-proto")
+      ?.split(",")[0]
+      ?.trim()
+      .toLowerCase();
+    const requestProtocol = new URL(request.url).protocol.replace(":", "");
+    const protocol =
+      forwardedProtocol === "http" || forwardedProtocol === "https"
+        ? forwardedProtocol
+        : requestProtocol;
+
+    try {
+      return new URL(`/share/${token}`, `${protocol}://${requestHost}`).toString();
+    } catch {
+      // Fall back to the request URL when proxy headers are malformed.
+    }
+  }
+
   return new URL(`/share/${token}`, request.url).toString();
 }
 

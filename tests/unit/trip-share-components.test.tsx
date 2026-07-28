@@ -230,6 +230,39 @@ describe("trip share views", () => {
     expect(within(dialog).getByText("链接已复制")).toBeTruthy();
   });
 
+  it("centers the dialog, locks background scrolling, and closes from the backdrop", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ enabled: false, url: null }))
+    );
+    const { TripShareButton } = await import(
+      "@/components/trips/trip-share-button"
+    );
+
+    render(<TripShareButton trip={sampleTrip} tripId="trip-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "分享行程" }));
+    const dialog = await screen.findByRole("dialog", { name: "分享行程" });
+    const backdrop = dialog.parentElement;
+
+    expect(backdrop?.className).toContain("place-items-center");
+    expect(backdrop?.className).not.toContain("place-items-end");
+    expect(dialog.className).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.documentElement.style.overflow).toBe("hidden");
+
+    fireEvent.click(dialog);
+    expect(screen.getByRole("dialog", { name: "分享行程" })).toBeTruthy();
+
+    if (!backdrop) {
+      throw new Error("Expected the share dialog backdrop.");
+    }
+    fireEvent.click(backdrop);
+
+    expect(screen.queryByRole("dialog", { name: "分享行程" })).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+    expect(document.documentElement.style.overflow).toBe("");
+  });
+
   it("disables all share actions while the initial state is loading", async () => {
     const fetchMock = vi.fn(() => new Promise<Response>(() => undefined));
     vi.stubGlobal("fetch", fetchMock);
