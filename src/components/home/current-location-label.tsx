@@ -8,6 +8,14 @@ type CurrentLocationLabelProps = {
 };
 
 export const CURRENT_LOCATION_STORAGE_KEY = "ai-commute:current-location";
+export const CURRENT_LOCATION_REFRESH_MS = 60_000;
+export const CURRENT_LOCATION_FAILURE_DISPLAY_MS = 3_000;
+
+const CURRENT_LOCATION_OPTIONS: PositionOptions = {
+  enableHighAccuracy: true,
+  maximumAge: 0,
+  timeout: 30_000,
+};
 
 type CurrentLocationPayload = {
   name?: string;
@@ -38,69 +46,102 @@ export function CurrentLocationLabel({
   fallbackCity,
   className,
 }: CurrentLocationLabelProps) {
-  const [label, setLabel] = useState(fallbackCity);
+  const [label, setLabel] = useState("GPS定位中");
   const classes = ["normal-case tracking-normal", className]
     .filter(Boolean)
     .join(" ");
 
   useEffect(() => {
-    setLabel(fallbackCity);
+    setLabel("GPS定位中");
+    window.localStorage.removeItem(CURRENT_LOCATION_STORAGE_KEY);
 
     if (!navigator.geolocation) {
-      window.localStorage.removeItem(CURRENT_LOCATION_STORAGE_KEY);
-      return;
+      setLabel("GPS定位不可用");
+      const fallbackTimer = window.setTimeout(
+        () => setLabel(fallbackCity),
+        CURRENT_LOCATION_FAILURE_DISPLAY_MS
+      );
+      return () => window.clearTimeout(fallbackTimer);
     }
 
     let cancelled = false;
-    const watchId = navigator.geolocation.watchPosition(
-      async (position) => {
-        const lng = position.coords.longitude.toFixed(6);
-        const lat = position.coords.latitude.toFixed(6);
+    let latestRequestId = 0;
+    let fallbackTimer: number | undefined;
 
-        setLabel("定位中");
-
-        try {
-          const response = await fetch(
-            `/api/location/reverse-geocode?lng=${lng}&lat=${lat}`
-          );
-          const payload = (await response.json().catch(
-            () => ({})
-          )) as ReverseGeocodePayload;
-
-          if (cancelled) {
-            return;
-          }
-
-          const location = payload.location;
-          if (response.ok && location?.name && location.lngLat) {
-            storeCurrentLocation(location);
-            setLabel(location.name);
-            return;
-          }
-
-          window.localStorage.removeItem(CURRENT_LOCATION_STORAGE_KEY);
-          setLabel(fallbackCity);
-        } catch {
-          if (!cancelled) {
-            window.localStorage.removeItem(CURRENT_LOCATION_STORAGE_KEY);
+    const failLocation = (message: string, requestId: number) => {
+      if (!cancelled && requestId === latestRequestId) {
+        window.localStorage.removeItem(CURRENT_LOCATION_STORAGE_KEY);
+        setLabel(message);
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = window.setTimeout(() => {
+          if (!cancelled && requestId === latestRequestId) {
             setLabel(fallbackCity);
           }
-        }
-      },
-      () => {
-        window.localStorage.removeItem(CURRENT_LOCATION_STORAGE_KEY);
-        setLabel(fallbackCity);
-      },
-      {
-        enableHighAccuracy: false,
-        maximumAge: 60_000,
-        timeout: 10_000,
+        }, CURRENT_LOCATION_FAILURE_DISPLAY_MS);
       }
+    };
+
+    const requestCurrentLocation = () => {
+      const requestId = ++latestRequestId;
+      window.clearTimeout(fallbackTimer);
+      setLabel("GPS定位中");
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lng = position.coords.longitude.toFixed(6);
+          const lat = position.coords.latitude.toFixed(6);
+
+          try {
+            const response = await fetch(
+              `/api/location/reverse-geocode?lng=${lng}&lat=${lat}`
+            );
+            const payload = (await response.json().catch(
+              () => ({})
+            )) as ReverseGeocodePayload;
+
+            if (cancelled || requestId !== latestRequestId) {
+              return;
+            }
+
+            const location = payload.location;
+            if (response.ok && location?.name && location.lngLat) {
+              storeCurrentLocation(location);
+              setLabel(location.name);
+              return;
+            }
+
+            failLocation("定位名称获取失败", requestId);
+          } catch {
+            failLocation("定位名称获取失败", requestId);
+          }
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            failLocation("GPS定位权限未开启", requestId);
+            return;
+          }
+
+          if (error.code === error.TIMEOUT) {
+            failLocation("GPS定位超时", requestId);
+            return;
+          }
+
+          failLocation("GPS定位失败", requestId);
+        },
+        CURRENT_LOCATION_OPTIONS
+      );
+    };
+
+    requestCurrentLocation();
+    const refreshTimer = window.setInterval(
+      requestCurrentLocation,
+      CURRENT_LOCATION_REFRESH_MS
     );
 
     return () => {
       cancelled = true;
-      navigator.geolocation.clearWatch(watchId);
+      window.clearInterval(refreshTimer);
+      window.clearTimeout(fallbackTimer);
     };
   }, [fallbackCity]);
 

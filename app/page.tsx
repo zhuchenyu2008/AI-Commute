@@ -92,7 +92,7 @@ export default async function HomePage() {
     }),
   ]);
   const defaultCity = settings?.defaultCity ?? "宁波";
-  const currentLocationName = settings?.originName ?? defaultCity;
+  const currentLocationName = settings?.originName?.trim() || defaultCity;
   const now = new Date();
   const latestTrip = selectHomeTripForDisplay(homeTripCandidates, now);
   const latestTripStatus = formatHomeTripStatus(latestTrip, now);

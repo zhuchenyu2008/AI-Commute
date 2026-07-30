@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import React from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -26,7 +27,11 @@ import { BottomNav } from "@/components/bottom-nav";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { HistoryDateFilter } from "@/components/history/history-date-filter";
 import { CommuteInput, getAgentStartResult } from "@/components/home/commute-input";
-import { CurrentLocationLabel } from "@/components/home/current-location-label";
+import {
+  CURRENT_LOCATION_FAILURE_DISPLAY_MS,
+  CURRENT_LOCATION_REFRESH_MS,
+  CurrentLocationLabel,
+} from "@/components/home/current-location-label";
 import { WEATHER_REFRESH_MS, WeatherCard } from "@/components/home/weather-card";
 import { MemoryDeleteButton } from "@/components/memories/memory-delete-button";
 import { BufferList } from "@/components/trips/buffer-list";
@@ -1424,7 +1429,7 @@ describe("sample-aligned UI components", () => {
   });
 
   it("reverse geocodes browser coordinates and stores a named current location", async () => {
-    const watchPosition = vi.fn((success: PositionCallback) => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
         coords: {
           latitude: 29.865249,
@@ -1437,9 +1442,7 @@ describe("sample-aligned UI components", () => {
         },
         timestamp: Date.now(),
       } as GeolocationPosition);
-      return 9;
     });
-    const clearWatch = vi.fn();
     const fetchMock = vi.fn(async () =>
       Response.json({
         location: {
@@ -1451,14 +1454,22 @@ describe("sample-aligned UI components", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("navigator", {
-      geolocation: { watchPosition, clearWatch },
+      geolocation: { getCurrentPosition },
     });
 
-    render(<CurrentLocationLabel fallbackCity="宁波外事学校" />);
+    render(<CurrentLocationLabel fallbackCity="宁波" />);
 
     expect(await screen.findByText("宁波外事学校")).toBeTruthy();
     expect(screen.queryByText(/29\.8652/)).toBeNull();
-    expect(watchPosition).toHaveBeenCalled();
+    expect(getCurrentPosition).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 30_000,
+      }
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/location/reverse-geocode?lng=121.523031&lat=29.865249"
     );
@@ -1471,25 +1482,46 @@ describe("sample-aligned UI components", () => {
     });
   });
 
-  it("falls back to the default origin when location permission is denied", async () => {
-    const watchPosition = vi.fn(
+  it("shows a GPS error before falling back when location permission is denied", () => {
+    vi.useFakeTimers();
+    const getCurrentPosition = vi.fn(
       (_success: PositionCallback, error: PositionErrorCallback) => {
         error({
           code: 1,
           message: "denied",
           PERMISSION_DENIED: 1,
         } as GeolocationPositionError);
-        return 3;
       }
     );
     vi.stubGlobal("navigator", {
-      geolocation: { watchPosition, clearWatch: vi.fn() },
+      geolocation: { getCurrentPosition },
     });
 
     render(<CurrentLocationLabel fallbackCity="金都嘉园" />);
 
-    expect(await screen.findByText("金都嘉园")).toBeTruthy();
+    expect(screen.getByText("GPS定位权限未开启")).toBeTruthy();
+    expect(screen.queryByText("金都嘉园")).toBeNull();
     expect(window.localStorage.getItem("ai-commute:current-location")).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(CURRENT_LOCATION_FAILURE_DISPLAY_MS);
+    });
+    expect(screen.getByText("金都嘉园")).toBeTruthy();
+  });
+
+  it("actively requests a fresh location every 60 seconds", () => {
+    vi.useFakeTimers();
+    const getCurrentPosition = vi.fn();
+    vi.stubGlobal("navigator", {
+      geolocation: { getCurrentPosition },
+    });
+
+    expect(CURRENT_LOCATION_REFRESH_MS).toBe(60_000);
+    render(<CurrentLocationLabel fallbackCity="宁波" />);
+
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(CURRENT_LOCATION_REFRESH_MS);
+    expect(getCurrentPosition).toHaveBeenCalledTimes(2);
   });
 
   it("allows the current location label to be styled as the home heading", () => {
@@ -1497,7 +1529,7 @@ describe("sample-aligned UI components", () => {
       <CurrentLocationLabel fallbackCity="东钱湖地铁站" className="block" />
     );
 
-    expect(html).toContain("东钱湖地铁站");
+    expect(html).toContain("GPS定位中");
     expect(html).toContain("block");
   });
 
