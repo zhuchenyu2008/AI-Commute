@@ -28,11 +28,16 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { HistoryDateFilter } from "@/components/history/history-date-filter";
 import { CommuteInput, getAgentStartResult } from "@/components/home/commute-input";
 import {
-  CURRENT_LOCATION_FAILURE_DISPLAY_MS,
-  CURRENT_LOCATION_REFRESH_MS,
+  CURRENT_LOCATION_CACHE_MS,
   CurrentLocationLabel,
+  getCurrentLocationTextSizeClass,
 } from "@/components/home/current-location-label";
-import { WEATHER_REFRESH_MS, WeatherCard } from "@/components/home/weather-card";
+import { LocationWeatherHeader } from "@/components/home/location-weather-header";
+import {
+  getWeatherStorageKey,
+  WEATHER_REFRESH_MS,
+  WeatherCard,
+} from "@/components/home/weather-card";
 import { MemoryDeleteButton } from "@/components/memories/memory-delete-button";
 import { BufferList } from "@/components/trips/buffer-list";
 import { TripDeleteButton } from "@/components/trips/trip-delete-button";
@@ -1379,7 +1384,7 @@ describe("sample-aligned UI components", () => {
     }
   });
 
-  it("loads home weather immediately and refreshes every half hour", async () => {
+  it("loads home weather immediately and refreshes every hour", async () => {
     let weatherRequests = 0;
     const fetchMock = vi.fn(async () => {
       weatherRequests += 1;
@@ -1396,8 +1401,8 @@ describe("sample-aligned UI components", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    expect(WEATHER_REFRESH_MS).toBe(30 * 60 * 1000);
-    render(<WeatherCard city="宁波" refreshMs={5} />);
+    expect(WEATHER_REFRESH_MS).toBe(60 * 60 * 1000);
+    render(<WeatherCard defaultCity="宁波" refreshMs={5} />);
 
     expect(await screen.findByText("小雨, 24°C")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith("/api/weather?city=%E5%AE%81%E6%B3%A2");
@@ -1406,6 +1411,107 @@ describe("sample-aligned UI components", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
     expect(await screen.findByText("多云, 26°C")).toBeTruthy();
+  });
+
+  it("shows cached weather while refreshing it in the background", async () => {
+    window.localStorage.setItem(
+      getWeatherStorageKey("宁波"),
+      JSON.stringify({
+        city: "宁波",
+        summary: "晴, 22°C",
+        updatedAt: Date.now() - 30 * 60 * 1000,
+      })
+    );
+    let resolveWeather: ((response: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveWeather = resolve;
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<WeatherCard defaultCity="宁波" />);
+
+    expect(await screen.findByText("晴, 22°C")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveWeather?.(
+      Response.json({ weather: { city: "宁波", summary: "多云, 26°C" } })
+    );
+
+    expect(await screen.findByText("多云, 26°C")).toBeTruthy();
+    expect(
+      JSON.parse(window.localStorage.getItem(getWeatherStorageKey("宁波")) ?? "{}")
+    ).toMatchObject({ city: "宁波", summary: "多云, 26°C" });
+  });
+
+  it("keeps cached weather visible when the background refresh fails", async () => {
+    window.localStorage.setItem(
+      getWeatherStorageKey("宁波"),
+      JSON.stringify({
+        city: "宁波",
+        summary: "晴, 22°C",
+        updatedAt: Date.now(),
+      })
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: "更新失败" }, { status: 502 }))
+    );
+
+    render(<WeatherCard defaultCity="宁波" />);
+
+    expect(await screen.findByText("晴, 22°C")).toBeTruthy();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("更新失败")).toBeNull();
+  });
+
+  it("keeps default-city weather visible until located-city weather succeeds", async () => {
+    window.localStorage.setItem(
+      getWeatherStorageKey("宁波"),
+      JSON.stringify({
+        city: "宁波",
+        summary: "晴, 22°C",
+        updatedAt: Date.now(),
+      })
+    );
+    const resolvers = new Map<string, (response: Response) => void>();
+    const fetchMock = vi.fn(
+      (url: string) =>
+        new Promise<Response>((resolve) => {
+          resolvers.set(url, resolve);
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<WeatherCard defaultCity="宁波" locatedCity="上海" />);
+
+    expect(await screen.findByText("晴, 22°C")).toBeTruthy();
+    expect(screen.getByText("宁波")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith("/api/weather?city=%E5%AE%81%E6%B3%A2");
+    expect(fetchMock).toHaveBeenCalledWith("/api/weather?city=%E4%B8%8A%E6%B5%B7");
+
+    resolvers.get("/api/weather?city=%E4%B8%8A%E6%B5%B7")?.(
+      Response.json({ weather: { city: "上海", summary: "小雨, 25°C" } })
+    );
+
+    expect(await screen.findByText("上海")).toBeTruthy();
+    expect(await screen.findByText("小雨, 25°C")).toBeTruthy();
+
+    resolvers.get("/api/weather?city=%E5%AE%81%E6%B3%A2")?.(
+      Response.json({ weather: { city: "宁波", summary: "多云, 26°C" } })
+    );
+
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(getWeatherStorageKey("宁波")) ?? "{}"
+        )
+      ).toMatchObject({ city: "宁波", summary: "多云, 26°C" });
+    });
+    expect(screen.getByText("上海")).toBeTruthy();
+    expect(screen.getByText("小雨, 25°C")).toBeTruthy();
   });
 
   it("opens the custom route preference selector options", () => {
@@ -1456,8 +1562,14 @@ describe("sample-aligned UI components", () => {
     vi.stubGlobal("navigator", {
       geolocation: { getCurrentPosition },
     });
+    const onLocationResolved = vi.fn();
 
-    render(<CurrentLocationLabel fallbackCity="宁波" />);
+    render(
+      <CurrentLocationLabel
+        fallbackCity="宁波"
+        onLocationResolved={onLocationResolved}
+      />
+    );
 
     expect(await screen.findByText("宁波外事学校")).toBeTruthy();
     expect(screen.queryByText(/29\.8652/)).toBeNull();
@@ -1479,11 +1591,14 @@ describe("sample-aligned UI components", () => {
       name: "宁波外事学校",
       lngLat: "121.523031,29.865249",
       city: "宁波",
+      updatedAt: expect.any(Number),
     });
+    expect(onLocationResolved).toHaveBeenCalledWith(
+      expect.objectContaining({ city: "宁波", name: "宁波外事学校" })
+    );
   });
 
-  it("shows a GPS error before falling back when location permission is denied", () => {
-    vi.useFakeTimers();
+  it("keeps the default departure visible when location permission is denied", () => {
     const getCurrentPosition = vi.fn(
       (_success: PositionCallback, error: PositionErrorCallback) => {
         error({
@@ -1499,29 +1614,125 @@ describe("sample-aligned UI components", () => {
 
     render(<CurrentLocationLabel fallbackCity="金都嘉园" />);
 
-    expect(screen.getByText("GPS定位权限未开启")).toBeTruthy();
-    expect(screen.queryByText("金都嘉园")).toBeNull();
-    expect(window.localStorage.getItem("ai-commute:current-location")).toBeNull();
-
-    act(() => {
-      vi.advanceTimersByTime(CURRENT_LOCATION_FAILURE_DISPLAY_MS);
-    });
     expect(screen.getByText("金都嘉园")).toBeTruthy();
+    expect(window.localStorage.getItem("ai-commute:current-location")).toBeNull();
   });
 
-  it("actively requests a fresh location every 60 seconds", () => {
-    vi.useFakeTimers();
+  it("shows a recent cached location while requesting a fresh one", () => {
+    window.localStorage.setItem(
+      "ai-commute:current-location",
+      JSON.stringify({
+        name: "上一次的位置",
+        lngLat: "121.500000,29.800000",
+        city: "宁波",
+        updatedAt: Date.now() - 60_000,
+      })
+    );
     const getCurrentPosition = vi.fn();
     vi.stubGlobal("navigator", {
       geolocation: { getCurrentPosition },
     });
+    const onLocationResolved = vi.fn();
+    const onLocatingStateChange = vi.fn();
 
-    expect(CURRENT_LOCATION_REFRESH_MS).toBe(60_000);
-    render(<CurrentLocationLabel fallbackCity="宁波" />);
+    expect(CURRENT_LOCATION_CACHE_MS).toBe(5 * 60 * 1000);
+    render(
+      <CurrentLocationLabel
+        fallbackCity="默认出发点"
+        onLocationResolved={onLocationResolved}
+        onLocatingStateChange={onLocatingStateChange}
+      />
+    );
 
+    expect(screen.getByText("上一次的位置")).toBeTruthy();
     expect(getCurrentPosition).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(CURRENT_LOCATION_REFRESH_MS);
-    expect(getCurrentPosition).toHaveBeenCalledTimes(2);
+    expect(onLocatingStateChange).toHaveBeenCalledWith(false);
+    expect(onLocationResolved).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "上一次的位置" })
+    );
+  });
+
+  it("ignores a location cached for five minutes and shows the default", () => {
+    window.localStorage.setItem(
+      "ai-commute:current-location",
+      JSON.stringify({
+        name: "过期位置",
+        lngLat: "121.500000,29.800000",
+        city: "宁波",
+        updatedAt: Date.now() - CURRENT_LOCATION_CACHE_MS,
+      })
+    );
+    const getCurrentPosition = vi.fn();
+    vi.stubGlobal("navigator", {
+      geolocation: { getCurrentPosition },
+    });
+    const onLocatingStateChange = vi.fn();
+
+    render(
+      <CurrentLocationLabel
+        fallbackCity="默认出发点"
+        onLocatingStateChange={onLocatingStateChange}
+      />
+    );
+
+    expect(screen.getByText("默认出发点")).toBeTruthy();
+    expect(screen.queryByText("过期位置")).toBeNull();
+    expect(onLocatingStateChange).toHaveBeenCalledWith(true);
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem("ai-commute:current-location")).toBeNull();
+  });
+
+  it("labels the default departure as locating until GPS resolves", async () => {
+    let resolvePosition: PositionCallback | undefined;
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      resolvePosition = success;
+    });
+    vi.stubGlobal("navigator", {
+      geolocation: { getCurrentPosition },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("/api/location/reverse-geocode")) {
+          return Response.json({
+            location: {
+              name: "天一广场",
+              lngLat: "121.550000,29.870000",
+              city: "宁波",
+            },
+          });
+        }
+        return Response.json({ weather: { city: "宁波", summary: "晴, 26°C" } });
+      })
+    );
+
+    render(
+      <LocationWeatherHeader
+        defaultCity="宁波"
+        fallbackLocationName="默认出发点"
+      />
+    );
+
+    expect(screen.getByText("正在定位中")).toBeTruthy();
+    expect(screen.getByText("默认出发点")).toBeTruthy();
+
+    act(() => {
+      resolvePosition?.({
+        coords: {
+          latitude: 29.87,
+          longitude: 121.55,
+          accuracy: 10,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: Date.now(),
+      } as GeolocationPosition);
+    });
+
+    expect(await screen.findByText("当前位置")).toBeTruthy();
+    expect(await screen.findByText("天一广场")).toBeTruthy();
   });
 
   it("allows the current location label to be styled as the home heading", () => {
@@ -1529,8 +1740,18 @@ describe("sample-aligned UI components", () => {
       <CurrentLocationLabel fallbackCity="东钱湖地铁站" className="block" />
     );
 
-    expect(html).toContain("GPS定位中");
+    expect(html).toContain("东钱湖地铁站");
     expect(html).toContain("block");
+  });
+
+  it("reduces the current location font size as the label gets longer", () => {
+    expect(getCurrentLocationTextSizeClass("宁波")).toContain("text-3xl");
+    expect(getCurrentLocationTextSizeClass("宁波高江茶文化商业广场")).toContain(
+      "text-xl"
+    );
+    expect(
+      getCurrentLocationTextSizeClass("一个非常非常长的当前位置名称需要继续缩小")
+    ).toContain("text-lg");
   });
 
   it("renders a custom history date trigger instead of a native date input", () => {

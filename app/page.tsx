@@ -5,14 +5,12 @@ import {
   Brain,
   Clock3,
   History,
-  MapPin,
   Navigation,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { GlassCard } from "@/components/glass-card";
 import { CommuteInput } from "@/components/home/commute-input";
-import { CurrentLocationLabel } from "@/components/home/current-location-label";
-import { WeatherCard } from "@/components/home/weather-card";
+import { LocationWeatherHeader } from "@/components/home/location-weather-header";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import {
@@ -106,21 +104,10 @@ export default async function HomePage() {
   return (
     <AppShell active="home">
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
-        <header className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.05em] text-[#434655]">
-              <MapPin aria-hidden="true" className="size-4 text-[#2563eb]" />
-              当前位置
-            </p>
-            <h1 className="text-3xl font-bold leading-tight text-[#191c1e] md:text-4xl">
-              <CurrentLocationLabel
-                className="block"
-                fallbackCity={currentLocationName}
-              />
-            </h1>
-          </div>
-          <WeatherCard city={defaultCity} />
-        </header>
+        <LocationWeatherHeader
+          defaultCity={defaultCity}
+          fallbackLocationName={currentLocationName}
+        />
 
         <section className="py-4">
           <CommuteInput />
