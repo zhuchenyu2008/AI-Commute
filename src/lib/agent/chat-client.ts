@@ -25,6 +25,7 @@ export type AgentChatToolDefinition = {
 export type AgentChatCompletionInput = {
   messages: AgentChatMessage[];
   tools: AgentChatToolDefinition[];
+  model?: string;
   signal?: AbortSignal;
 };
 
@@ -39,6 +40,7 @@ export type AgentChatClient = {
 type EnvSource = Partial<Record<string, string | undefined>>;
 
 const DEFAULT_MODEL = "gpt-4o-mini";
+export const TRAVEL_PLANNING_MODEL = "deepseek-v4-flash";
 
 function parseToolArguments(value: string | null | undefined) {
   if (!value) return {};
@@ -94,10 +96,10 @@ export function createOpenAiChatClient(
     apiKey,
     baseURL: env.OPENAI_BASE_URL?.trim() || undefined,
   });
-  const model = env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
-
   return {
     async complete(input) {
+      const model =
+        input.model?.trim() || env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
       const completion = await client.chat.completions.create(
         {
           model,
@@ -448,9 +450,51 @@ function readFallbackRouteSummary(
   return typeof summary === "string" && summary.trim() ? summary : fallback;
 }
 
+type FallbackTravelForecast = NonNullable<
+  TravelPlan["weather"]["forecast"]
+>[number];
+
+function fallbackDate(offsetDays: number) {
+  return new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function normalizeFallbackForecast(
+  value: unknown,
+  index: number
+): FallbackTravelForecast {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const summary =
+    typeof record.summary === "string" && record.summary.trim()
+      ? record.summary.trim()
+      : "天气预报暂无详情";
+  const adverse = /雨|雪|雷|暴|大风|台风|高温|寒潮/.test(summary);
+
+  return {
+    date:
+      typeof record.date === "string" && record.date.trim()
+        ? record.date.trim()
+        : fallbackDate(index),
+    day: index + 1,
+    summary,
+    risk: adverse ? "medium" : "low",
+    drivingAdvice: adverse
+      ? "出发前重新确认能见度、路况和停车条件，必要时切换公共交通或缩短户外路段。"
+      : "出发前复查实时天气和路况，保留公共交通作为备选。",
+    outdoorAdvice: adverse
+      ? "减少暴露在户外的连续时间，准备室内替代景点。"
+      : "适合安排户外景点，但仍需在出发前复查天气。",
+  };
+}
+
 function buildFallbackTravelPlan(input: {
   destination: FallbackDestination;
   weatherSummary: string;
+  weatherForecast?: unknown[];
   drivingMinutes: number;
   drivingSummary: string;
   transitMinutes: number;
@@ -459,6 +503,11 @@ function buildFallbackTravelPlan(input: {
   const recommended =
     input.drivingMinutes <= input.transitMinutes ? "driving" : "transit";
   const recommendedLabel = recommended === "driving" ? "自驾" : "公共交通";
+  const forecast = (
+    input.weatherForecast?.length
+      ? input.weatherForecast
+      : [{ summary: input.weatherSummary }, { summary: input.weatherSummary }]
+  ).map(normalizeFallbackForecast);
 
   return {
     destination: input.destination.name,
@@ -468,8 +517,28 @@ function buildFallbackTravelPlan(input: {
     weather: {
       city: "宁波",
       summary: input.weatherSummary,
-      advice: "天气仅作参考：自然景点按实时情况调整，出发前再次确认降雨、风力和景区公告。",
+      advice:
+        "天气会随出发时间变化：出发前、每次路线复查和进入长距离自驾前重新确认降雨、风力、能见度与道路情况。",
       source: "高德天气参考",
+      observedAt: new Date().toISOString(),
+      dynamicMonitoring: true,
+      refreshPolicy: "出发前3小时、每次路线复查、出发前即时刷新",
+      forecast,
+      routeRisks: forecast.slice(0, 2).map((item, index) => ({
+        legOrder: index + 1,
+        day: item.day,
+        date: item.date,
+        route: "出发地 → 宁波旅行目的地",
+        summary: item.summary,
+        risk: item.risk,
+        drivingAdvice:
+          item.drivingAdvice ??
+          "出发前重新确认实时天气和道路情况。",
+        action:
+          item.risk === "low"
+            ? "按计划出发，保留公共交通备选。"
+            : "先复查天气和路况，必要时切换公共交通或调整户外行程。",
+      })),
     },
     transport: {
       recommended,
@@ -498,6 +567,36 @@ function buildFallbackTravelPlan(input: {
         stayMinutes: 180,
         bestTime: "上午或傍晚",
         weatherNote: "雨天减少湖边长距离步行，关注临时开放信息。",
+      },
+      {
+        name: "四明山国家森林公园",
+        category: "natural",
+        reason: "山林、溪谷和观景路段组合丰富，适合补充半日自驾自然线路。",
+        address: "宁波市余姚市四明山区域",
+        day: 1,
+        stayMinutes: 180,
+        bestTime: "晴天上午",
+        weatherNote: "雨雾、大风或夜间驾驶时降低山路优先级，出发前确认道路和景区状态。",
+      },
+      {
+        name: "松兰山海滨旅游度假区",
+        category: "natural",
+        reason: "海岸线和开阔视野适合安排滨海自然体验，可与象山方向行程串联。",
+        address: "宁波市象山县松兰山",
+        day: 2,
+        stayMinutes: 150,
+        bestTime: "天气稳定的下午",
+        weatherNote: "强风、雷雨或海浪预警时不安排长时间海边停留。",
+      },
+      {
+        name: "宁波植物园",
+        category: "natural",
+        reason: "距离市区较近、步行节奏可控，适合作为天气变化时的低风险户外备选。",
+        address: "宁波市镇海区植物园",
+        day: 2,
+        stayMinutes: 120,
+        bestTime: "上午或傍晚",
+        weatherNote: "小雨可缩短露天路线，持续降雨时切换室内人文景点。",
       },
       {
         name: "天一阁",
@@ -723,13 +822,19 @@ export function createFallbackChatClient(): AgentChatClient {
           transitCallId,
           42
         );
+        const weatherPayload = readFallbackToolPayload(
+          toolMessages,
+          "mock-weather"
+        );
         const travelPlan = buildFallbackTravelPlan({
           destination,
           weatherSummary:
-            typeof readFallbackToolPayload(toolMessages, "mock-weather").summary ===
-            "string"
-              ? String(readFallbackToolPayload(toolMessages, "mock-weather").summary)
+            typeof weatherPayload.summary === "string"
+              ? weatherPayload.summary
               : "宁波天气暂无更多信息，仅作参考。",
+          weatherForecast: Array.isArray(weatherPayload.forecast)
+            ? weatherPayload.forecast
+            : undefined,
           drivingMinutes,
           drivingSummary: readFallbackRouteSummary(
             toolMessages,

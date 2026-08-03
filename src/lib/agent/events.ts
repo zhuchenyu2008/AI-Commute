@@ -44,6 +44,7 @@ export function formatAgentToolName(name: string) {
     replace_reminder_schedule: "更新提醒计划",
     replace_trip_legs: "更新路线段",
     replace_trip_stops: "更新停靠点",
+    search_natural_attractions: "搜索自然景观",
     search_poi: "搜索地点",
     select_route_candidate: "选择路线方案",
     update_trip_summary: "更新行程摘要",

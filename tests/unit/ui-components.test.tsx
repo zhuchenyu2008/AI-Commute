@@ -468,6 +468,28 @@ describe("sample-aligned UI components", () => {
             summary: "多云，24°C",
             advice: "自然景点留意降雨",
             source: "高德天气参考",
+            dynamicMonitoring: true,
+            refreshPolicy: "出发前和每次路线复查",
+            forecast: [
+              {
+                date: "2026-08-03",
+                day: 1,
+                summary: "多云，24°C",
+                risk: "medium",
+                drivingAdvice: "出发前复查路况",
+                outdoorAdvice: "保留室内备选",
+              },
+            ],
+            routeRisks: [
+              {
+                legOrder: 1,
+                route: "北京 → 宁波",
+                summary: "有降雨概率",
+                risk: "medium",
+                drivingAdvice: "降低自驾优先级",
+                action: "必要时切换公共交通",
+              },
+            ],
           },
           transport: {
             recommended: "mixed",
@@ -522,6 +544,9 @@ describe("sample-aligned UI components", () => {
 
     expect(html).toContain("旅行规划");
     expect(html).toContain("天气参考");
+    expect(html).toContain("自驾天气动态监控已开启");
+    expect(html).toContain("行程天气与自驾影响");
+    expect(html).toContain("自驾路段天气风险");
     expect(html).toContain("自驾方案");
     expect(html).toContain("公共交通方案");
     expect(html).toContain("自然景观");

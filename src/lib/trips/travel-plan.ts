@@ -2,11 +2,39 @@ export type TravelTransportMode = "driving" | "transit" | "mixed";
 
 export type TravelAttractionCategory = "natural" | "cultural";
 
+export type TravelWeatherRisk = "low" | "medium" | "high";
+
+export type TravelWeatherForecast = {
+  date?: string;
+  day?: number;
+  location?: string;
+  summary: string;
+  risk: TravelWeatherRisk;
+  drivingAdvice?: string;
+  outdoorAdvice?: string;
+};
+
+export type TravelWeatherRouteRisk = {
+  legOrder?: number;
+  day?: number;
+  date?: string;
+  route: string;
+  summary: string;
+  risk: TravelWeatherRisk;
+  drivingAdvice: string;
+  action?: string;
+};
+
 export type TravelPlanWeather = {
   city: string;
   summary: string;
   advice: string;
   source?: string;
+  observedAt?: string;
+  dynamicMonitoring?: boolean;
+  refreshPolicy?: string;
+  forecast?: TravelWeatherForecast[];
+  routeRisks?: TravelWeatherRouteRisk[];
 };
 
 export type TravelTransportOption = {
@@ -108,6 +136,20 @@ function readOptionalNumber(record: Record<string, unknown>, key: string) {
   return Number.isFinite(number) ? Math.max(0, Math.round(number)) : undefined;
 }
 
+function readOptionalBoolean(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    if (value.trim().toLowerCase() === "true") return true;
+    if (value.trim().toLowerCase() === "false") return false;
+  }
+
+  return undefined;
+}
+
 function readArray(record: Record<string, unknown>, key: string, label: string) {
   const value = record[key];
   if (!Array.isArray(value)) {
@@ -115,6 +157,89 @@ function readArray(record: Record<string, unknown>, key: string, label: string) 
   }
 
   return value;
+}
+
+function readOptionalArray(
+  record: Record<string, unknown>,
+  key: string,
+  label: string
+) {
+  const value = record[key];
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  return readArray(record, key, label);
+}
+
+function normalizeWeatherRisk(value: unknown): TravelWeatherRisk {
+  return value === "low" || value === "high" ? value : "medium";
+}
+
+function normalizeWeatherForecast(value: unknown): TravelWeatherForecast {
+  const record = readRecord(value, "travelPlan.weather.forecast[]");
+
+  return {
+    date: readText(
+      record,
+      "date",
+      "travelPlan.weather.forecast[]",
+      false
+    ),
+    day: readOptionalNumber(record, "day"),
+    location: readText(
+      record,
+      "location",
+      "travelPlan.weather.forecast[]",
+      false
+    ),
+    summary: readText(
+      record,
+      "summary",
+      "travelPlan.weather.forecast[]"
+    )!,
+    risk: normalizeWeatherRisk(record.risk),
+    drivingAdvice: readText(
+      record,
+      "drivingAdvice",
+      "travelPlan.weather.forecast[]",
+      false
+    ),
+    outdoorAdvice: readText(
+      record,
+      "outdoorAdvice",
+      "travelPlan.weather.forecast[]",
+      false
+    ),
+  };
+}
+
+function normalizeWeatherRouteRisk(value: unknown): TravelWeatherRouteRisk {
+  const record = readRecord(value, "travelPlan.weather.routeRisks[]");
+
+  return {
+    legOrder: readOptionalNumber(record, "legOrder"),
+    day: readOptionalNumber(record, "day"),
+    date: readText(record, "date", "travelPlan.weather.routeRisks[]", false),
+    route: readText(record, "route", "travelPlan.weather.routeRisks[]")!,
+    summary: readText(
+      record,
+      "summary",
+      "travelPlan.weather.routeRisks[]"
+    )!,
+    risk: normalizeWeatherRisk(record.risk),
+    drivingAdvice: readText(
+      record,
+      "drivingAdvice",
+      "travelPlan.weather.routeRisks[]"
+    )!,
+    action: readText(
+      record,
+      "action",
+      "travelPlan.weather.routeRisks[]",
+      false
+    ),
+  };
 }
 
 function normalizeAttraction(value: unknown): TravelAttraction {
@@ -212,6 +337,30 @@ export function normalizeTravelPlan(value: unknown): TravelPlan {
       summary: readText(weather, "summary", "travelPlan.weather")!,
       advice: readText(weather, "advice", "travelPlan.weather")!,
       source: readText(weather, "source", "travelPlan.weather", false),
+      observedAt: readText(
+        weather,
+        "observedAt",
+        "travelPlan.weather",
+        false
+      ),
+      dynamicMonitoring:
+        readOptionalBoolean(weather, "dynamicMonitoring") ?? true,
+      refreshPolicy: readText(
+        weather,
+        "refreshPolicy",
+        "travelPlan.weather",
+        false
+      ),
+      forecast: readOptionalArray(
+        weather,
+        "forecast",
+        "travelPlan.weather"
+      ).map(normalizeWeatherForecast),
+      routeRisks: readOptionalArray(
+        weather,
+        "routeRisks",
+        "travelPlan.weather"
+      ).map(normalizeWeatherRouteRisk),
     },
     transport: {
       recommended:
@@ -235,6 +384,30 @@ export function normalizeTravelPlan(value: unknown): TravelPlan {
     food: readArray(record, "food", "travelPlan").map(normalizeFood),
     pitfalls: readArray(record, "pitfalls", "travelPlan").map(normalizePitfall),
   };
+}
+
+export function requiredNaturalAttractionCount(days?: number) {
+  return days && days >= 4 ? 4 : 3;
+}
+
+export function assertTravelPlanAttractionCoverage(plan: TravelPlan) {
+  const naturalCount = plan.attractions.filter(
+    (attraction) => attraction.category === "natural"
+  ).length;
+  const culturalCount = plan.attractions.filter(
+    (attraction) => attraction.category === "cultural"
+  ).length;
+  const requiredNaturalCount = requiredNaturalAttractionCount(plan.days);
+
+  if (naturalCount < requiredNaturalCount) {
+    throw new Error(
+      `旅行规划至少需要 ${requiredNaturalCount} 个自然景观候选，当前只有 ${naturalCount} 个。请扩大自然景观搜索范围后重试。`
+    );
+  }
+
+  if (culturalCount < 1) {
+    throw new Error("旅行规划至少需要 1 个人文景点候选。");
+  }
 }
 
 export function parseTravelPlanJson(value: string | null | undefined) {

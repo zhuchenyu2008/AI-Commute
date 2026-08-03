@@ -1,10 +1,12 @@
 import {
   BusFront,
   CarFront,
+  CalendarDays,
   CloudSun,
   Hotel,
   Landmark,
   MapPin,
+  RefreshCw,
   Trees,
   TriangleAlert,
   Utensils,
@@ -29,6 +31,12 @@ function transportIcon(mode: TravelTransportMode) {
   ) : (
     <CarFront aria-hidden="true" className="size-5" />
   );
+}
+
+function weatherRiskLabel(risk: "low" | "medium" | "high") {
+  if (risk === "high") return "高风险";
+  if (risk === "medium") return "需留意";
+  return "较稳定";
 }
 
 function AttractionList({
@@ -133,6 +141,86 @@ export function TravelPlanCard({ plan }: { plan: TravelPlan }) {
             </span>
           ) : null}
         </div>
+        {plan.weather.dynamicMonitoring || plan.weather.refreshPolicy ? (
+          <div className="mt-3 flex items-start gap-2 rounded-2xl border border-[#93c5fd]/55 bg-[#eff6ff] px-4 py-3 text-xs leading-5 text-[#1e40af]">
+            <RefreshCw aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>
+              自驾天气动态监控已开启
+              {plan.weather.refreshPolicy
+                ? `：${plan.weather.refreshPolicy}`
+                : "，每次路线复查时重新评估。"}
+            </span>
+          </div>
+        ) : null}
+        {plan.weather.forecast?.length ? (
+          <div className="mt-4 rounded-2xl bg-white/60 p-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-[#191c1e]">
+              <CalendarDays aria-hidden="true" className="size-5 text-[#2563eb]" />
+              行程天气与自驾影响
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {plan.weather.forecast.map((forecast, index) => (
+                <article
+                  className="rounded-2xl border border-[#c3c6d7]/45 bg-[#f8fafc] p-3"
+                  key={`${forecast.date ?? "day"}-${forecast.day ?? index}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-[#191c1e]">
+                        {forecast.day ? `第 ${forecast.day} 天` : "行程天气"}
+                        {forecast.date ? ` · ${forecast.date}` : ""}
+                      </p>
+                      {forecast.location ? (
+                        <p className="mt-1 text-[11px] font-semibold text-[#737686]">
+                          {forecast.location}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-[#fff4d6] px-2 py-1 text-[11px] font-bold text-[#7a4f00]">
+                      {weatherRiskLabel(forecast.risk)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-5 text-[#434655]">
+                    {forecast.summary}
+                  </p>
+                  {forecast.drivingAdvice ? (
+                    <p className="mt-2 text-xs leading-5 text-[#5b6072]">
+                      自驾：{forecast.drivingAdvice}
+                    </p>
+                  ) : null}
+                  {forecast.outdoorAdvice ? (
+                    <p className="mt-1 text-xs leading-5 text-[#5b6072]">
+                      户外：{forecast.outdoorAdvice}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {plan.weather.routeRisks?.length ? (
+          <div className="mt-3 rounded-2xl border border-[#fdba74]/55 bg-[#fff7ed] p-4">
+            <p className="text-sm font-bold text-[#7c2d12]">自驾路段天气风险</p>
+            <div className="mt-3 space-y-2">
+              {plan.weather.routeRisks.map((risk, index) => (
+                <div className="rounded-xl bg-white/70 px-3 py-2" key={`${risk.route}-${risk.legOrder ?? index}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-xs font-bold text-[#431407]">
+                      {risk.route}
+                    </p>
+                    <span className="shrink-0 text-[11px] font-bold text-[#9a3412]">
+                      {weatherRiskLabel(risk.risk)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-[#7c2d12]">
+                    {risk.summary} · {risk.drivingAdvice}
+                    {risk.action ? ` ${risk.action}` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </GlassCard>
 
       <GlassCard className="p-5">

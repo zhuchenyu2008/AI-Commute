@@ -628,12 +628,14 @@ describe("agent planning sessions", () => {
     let systemText = "";
     let toolNames: string[] = [];
     let createTripParameters = "";
+    let requestedModel: string | undefined;
     const chatClient: AgentChatClient = {
-      async complete({ messages, tools }) {
+      async complete({ messages, tools, model }) {
         systemText = messages
           .filter((message) => message.role === "system")
           .map((message) => message.content)
           .join("\n");
+        requestedModel = model;
         toolNames = tools.map((tool) => tool.name);
         createTripParameters = JSON.stringify(
           tools.find((tool) => tool.name === "create_trip")?.parameters
@@ -649,9 +651,13 @@ describe("agent planning sessions", () => {
 
     expect(result.status).toBe("failed");
     expect(systemText).toContain("one-to-three-day request");
-    expect(systemText).toContain("at most six representative");
+    expect(systemText).toContain("at most ten representative");
+    expect(systemText).toContain("at least three distinct natural candidates");
+    expect(systemText).toContain("weather.routeRisks");
     expect(systemText).toContain("immediately call create_trip");
     expect(toolNames).toContain("get_driving_route");
+    expect(toolNames).toContain("search_natural_attractions");
+    expect(requestedModel).toBe("deepseek-v4-flash");
     expect(createTripParameters).toContain("travelPlan");
   });
 

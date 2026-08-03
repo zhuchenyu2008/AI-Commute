@@ -75,7 +75,12 @@ describe("createFallbackChatClient", () => {
 
     expect(travelPlan).toMatchObject({
       destination: "Longhu Tianjie",
-      weather: { summary: "宁波天气参考：多云，24°C" },
+      weather: {
+        summary: "宁波天气参考：多云，24°C",
+        dynamicMonitoring: true,
+        forecast: expect.any(Array),
+        routeRisks: expect.any(Array),
+      },
       transport: {
         recommended: "driving",
         driving: { durationMinutes: 36 },
@@ -89,6 +94,11 @@ describe("createFallbackChatClient", () => {
       food: expect.any(Array),
       pitfalls: expect.any(Array),
     });
+    expect(
+      (travelPlan?.attractions as Array<{ category: string }>).filter(
+        (attraction) => attraction.category === "natural"
+      )
+    ).toHaveLength(4);
   });
 
   it("does not invent a default origin when settings have no selected origin", async () => {

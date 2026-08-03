@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertTravelPlanAttractionCoverage,
   normalizeTravelPlan,
   parseTravelPlanJson,
 } from "@/lib/trips/travel-plan";
@@ -13,6 +14,26 @@ const sampleTravelPlan = {
     summary: "多云，24°C",
     advice: "自然景点留意降雨",
     source: "高德天气参考",
+    dynamicMonitoring: true,
+    refreshPolicy: "出发前和每次路线复查",
+    forecast: [
+      {
+        date: "2026-08-03",
+        day: 1,
+        summary: "多云，24°C",
+        risk: "low",
+        drivingAdvice: "出发前复查路况",
+      },
+    ],
+    routeRisks: [
+      {
+        legOrder: 1,
+        route: "北京到宁波",
+        summary: "天气稳定",
+        risk: "low",
+        drivingAdvice: "保留公共交通备选",
+      },
+    ],
   },
   transport: {
     recommended: "driving",
@@ -37,6 +58,18 @@ const sampleTravelPlan = {
       reason: "适合半日自然游",
       day: "1",
       stayMinutes: 180,
+    },
+    {
+      name: "四明山",
+      category: "natural",
+      reason: "山林自然景观",
+      day: 1,
+    },
+    {
+      name: "松兰山",
+      category: "natural",
+      reason: "滨海自然景观",
+      day: 2,
     },
     {
       name: "天一阁",
@@ -77,11 +110,39 @@ describe("travel plan normalization", () => {
         recommended: "driving",
         driving: { durationMinutes: 36 },
       },
-      attractions: [
-        { name: "东钱湖", category: "natural", day: 1 },
-        { name: "天一阁", category: "cultural", day: 2 },
-      ],
+      weather: {
+        dynamicMonitoring: true,
+        forecast: [{ summary: "多云，24°C", risk: "low" }],
+      },
     });
+    expect(normalizeTravelPlan(sampleTravelPlan).attractions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "东钱湖",
+          category: "natural",
+          day: 1,
+        }),
+        expect.objectContaining({
+          name: "天一阁",
+          category: "cultural",
+          day: 2,
+        }),
+      ])
+    );
+  });
+
+  it("requires a broad natural-attraction candidate set for travel creation", () => {
+    const plan = normalizeTravelPlan(sampleTravelPlan);
+
+    expect(() => assertTravelPlanAttractionCoverage(plan)).not.toThrow();
+    expect(() =>
+      assertTravelPlanAttractionCoverage({
+        ...plan,
+        attractions: plan.attractions.filter(
+          (attraction) => attraction.category !== "natural"
+        ),
+      })
+    ).toThrow("至少需要 3 个自然景观");
   });
 
   it("rejects incomplete plans and safely hides invalid persisted JSON", () => {

@@ -50,6 +50,7 @@ export type {
   RouteMode,
   RouteRequest,
   RouteResult,
+  WeatherForecast,
   WeatherRequest,
   WeatherReference
 } from "./types";

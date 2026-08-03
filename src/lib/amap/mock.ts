@@ -80,6 +80,26 @@ export function createMockAmapClient(): AmapClient {
         kind: "reference",
         city,
         summary: `${city} 天气参考：晴，温和，仅作通勤参考。`,
+        observedAt: new Date().toISOString(),
+        forecast: Array.from({ length: 4 }, (_, index) => {
+          const date = new Date(Date.now() + index * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .slice(0, 10);
+
+          return {
+            date,
+            week: String(index + 1),
+            dayWeather: "晴",
+            nightWeather: "晴",
+            dayTemperature: 28,
+            nightTemperature: 20,
+            dayWind: "东南",
+            nightWind: "东南",
+            dayPower: "3",
+            nightPower: "3",
+            summary: "晴，20~28°C，东南风3级",
+          };
+        }),
         raw: {
           source: "mock",
           city

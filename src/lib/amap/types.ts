@@ -19,10 +19,26 @@ export type WeatherRequest = {
   city: string;
 };
 
+export type WeatherForecast = {
+  date: string;
+  week?: string;
+  dayWeather?: string;
+  nightWeather?: string;
+  dayTemperature?: number;
+  nightTemperature?: number;
+  dayWind?: string;
+  nightWind?: string;
+  dayPower?: string;
+  nightPower?: string;
+  summary: string;
+};
+
 export type WeatherReference = {
   kind: "reference";
   city: string;
   summary: string;
+  observedAt?: string;
+  forecast?: WeatherForecast[];
   raw?: unknown;
 };
 

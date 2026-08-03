@@ -2,6 +2,7 @@ export type AgentToolName =
   | "read_settings"
   | "read_memories"
   | "search_poi"
+  | "search_natural_attractions"
   | "get_poi_detail"
   | "get_weather_reference"
   | "get_transit_route"

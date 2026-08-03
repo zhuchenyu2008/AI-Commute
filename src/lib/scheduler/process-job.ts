@@ -399,12 +399,16 @@ function buildRecheckMessage(job: DueReminderJob, thresholdMinutes: number) {
   const leg = job.leg;
   const destination =
     leg?.destinationName ?? job.trip.finalStopName ?? job.trip.title;
+  const isTravel = job.trip.agentSessions[0]?.purpose === "travel";
 
   return [
     `路线复查：请重新核对当前行程 ${job.trip.title} 前往 ${destination} 的路线。`,
     `Current trip id: ${job.tripId}.`,
     `只要路线耗时或最晚出发时间变化没有大于 ${thresholdMinutes} 分钟，就保持现有提醒计划，不要主动通知用户。`,
     "如果变化大于阈值，请用当前路线更新工具修改行程路线或最晚出发时间；系统会据此刷新后续提醒并通知用户时间已变化。",
+    isTravel
+      ? "这是旅行行程：先调用 get_weather_reference 读取当前天气和可用预报，再重新评估自驾路段、户外景点和公共交通替代方案。若天气或道路风险变化，即使路线分钟数未超过阈值，也要用 update_trip_summary 或 replace_trip_stops/replace_trip_legs 写回包含最新 weather.forecast、weather.routeRisks、dynamicMonitoring 和 refreshPolicy 的 travelPlan。"
+      : "",
   ].join("\n");
 }
 

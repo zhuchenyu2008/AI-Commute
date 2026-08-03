@@ -43,6 +43,7 @@ describe("createMockAmapClient", () => {
     expect(reference.kind).toBe("reference");
     expect(reference.city).toBe("宁波");
     expect(reference.summary).toContain("宁波");
+    expect(reference.forecast).toHaveLength(4);
   });
 
   it("returns a named reverse geocode result for browser coordinates", async () => {
@@ -147,6 +148,68 @@ describe("createAmapClient", () => {
 });
 
 describe("createRealAmapClient", () => {
+  it("requests live weather plus a multi-day forecast", async () => {
+    const requests: string[] = [];
+    const client = createRealAmapClient({
+      apiKey: "test-key",
+      throttle: { schedule: (job) => job() },
+      fetchImpl: vi.fn(async (url: string) => {
+        requests.push(url);
+        return new Response(
+          JSON.stringify({
+            status: "1",
+            lives: [
+              {
+                city: "宁波",
+                weather: "小雨",
+                temperature: "24",
+                winddirection: "东南",
+                windpower: "3",
+              },
+            ],
+            forecasts: [
+              {
+                city: "宁波",
+                casts: [
+                  {
+                    date: "2026-08-03",
+                    week: "一",
+                    dayweather: "小雨",
+                    nightweather: "阴",
+                    daytemp: "27",
+                    nighttemp: "22",
+                    daywind: "东南",
+                    daypower: "3",
+                  },
+                ],
+              },
+            ],
+          })
+        );
+      }) as typeof fetch,
+    });
+
+    const weather = await client.getWeather({ city: "宁波" });
+
+    expect(weather).toMatchObject({
+      kind: "reference",
+      city: "宁波",
+      summary: "小雨, 24°C, 东南风, 3级",
+      forecast: [
+        {
+          date: "2026-08-03",
+          dayWeather: "小雨",
+          nightWeather: "阴",
+          dayTemperature: 27,
+          nightTemperature: 22,
+          summary: expect.stringContaining("小雨"),
+        },
+      ],
+    });
+    expect(new URL(requests[0]).searchParams.get("extensions")).toBe("all");
+    expect(weather.observedAt).toEqual(expect.any(String));
+  });
+
   it("passes transit cityd, converts duration, and keeps raw route data", async () => {
     const requests: string[] = [];
     const client = createRealAmapClient({

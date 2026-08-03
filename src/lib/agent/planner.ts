@@ -8,7 +8,10 @@ import type {
   AgentChatToolCall,
   AgentChatToolDefinition,
 } from "@/lib/agent/chat-client";
-import { createOpenAiChatClient } from "@/lib/agent/chat-client";
+import {
+  createOpenAiChatClient,
+  TRAVEL_PLANNING_MODEL,
+} from "@/lib/agent/chat-client";
 import { assertAgentRunActive, recordToolCall } from "@/lib/agent/tools";
 import { buildConfirmedMemoryContext } from "@/lib/memories/context";
 import type {
@@ -38,6 +41,7 @@ import type {
   PlannedTripStopInput,
 } from "@/lib/trips/types";
 import {
+  assertTravelPlanAttractionCoverage,
   normalizeTravelPlan,
   parseTravelPlanJson,
 } from "@/lib/trips/travel-plan";
@@ -48,6 +52,12 @@ const SESSION_MAX_ATTEMPTS = 2;
 const ORIGIN_REQUIRED_MESSAGE =
   "请先在设置中选择默认出发点，或在本次请求中提供出发点。";
 const LNG_LAT_PATTERN = /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/;
+const NATURAL_ATTRACTION_SEARCH_GROUPS = [
+  "山,峰,森林,森林公园,国家公园",
+  "湖,湿地,溪流,瀑布,峡谷",
+  "海,海岛,海滩,滨海,湾",
+  "公园,植物园,观景台,风景区",
+] as const;
 
 export { AgentRunTimeoutError };
 
@@ -249,12 +259,44 @@ const legSchema = objectParameters(
   ]
 );
 
+const travelWeatherForecastSchema = objectParameters(
+  {
+    date: { type: "string" },
+    day: { type: "number" },
+    location: { type: "string" },
+    summary: { type: "string" },
+    risk: { type: "string", enum: ["low", "medium", "high"] },
+    drivingAdvice: { type: "string" },
+    outdoorAdvice: { type: "string" },
+  },
+  ["summary"]
+);
+
+const travelWeatherRouteRiskSchema = objectParameters(
+  {
+    legOrder: { type: "number" },
+    day: { type: "number" },
+    date: { type: "string" },
+    route: { type: "string" },
+    summary: { type: "string" },
+    risk: { type: "string", enum: ["low", "medium", "high"] },
+    drivingAdvice: { type: "string" },
+    action: { type: "string" },
+  },
+  ["route", "summary", "drivingAdvice"]
+);
+
 const travelWeatherSchema = objectParameters(
   {
     city: { type: "string" },
     summary: { type: "string" },
     advice: { type: "string" },
     source: { type: "string" },
+    observedAt: { type: "string" },
+    dynamicMonitoring: { type: "boolean" },
+    refreshPolicy: { type: "string" },
+    forecast: arrayOfItems(travelWeatherForecastSchema),
+    routeRisks: arrayOfItems(travelWeatherRouteRiskSchema),
   },
   ["city", "summary", "advice"]
 );
@@ -378,6 +420,18 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
     ),
   },
   {
+    name: "search_natural_attractions",
+    description:
+      "Search and deduplicate a broad set of natural-attraction candidates in one call. The application searches mountain, lake, forest, wetland, coast, canyon, waterfall, park, and viewpoint keywords. Use this before choosing natural attractions; return at least three distinct candidates when the destination has enough options.",
+    parameters: objectParameters(
+      {
+        city: { type: "string" },
+        limit: { type: "number" },
+      },
+      []
+    ),
+  },
+  {
     name: "get_poi_detail",
     description: "Read AMap POI details.",
     parameters: objectParameters({ id: { type: "string" } }, ["id"]),
@@ -385,7 +439,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   {
     name: "get_weather_reference",
     description:
-      "Read AMap weather as reference evidence. The application does not hard-code weather rules.",
+      "Read live weather plus the available multi-day forecast from AMap. Use the forecast for each itinerary day and route segment; call it again during route rechecks because weather is dynamic evidence, not a static label.",
     parameters: objectParameters({ city: { type: "string" } }, ["city"]),
   },
   {
@@ -560,11 +614,12 @@ Final user-facing replies must be plain text without Markdown formatting, headin
 
 const TRAVEL_SYSTEM_PROMPT = `You are a personal travel-itinerary planning AI. Current dates should be interpreted in Beijing time.
 Plan a practical, evidence-aware trip rather than a generic list of attractions. Parse the destination, dates, number of days, origin, budget, pace, party, and constraints from the user's request. Ask for missing value-critical details only when the request cannot be safely planned; otherwise make a reasonable choice and state it in the result.
-Use read_settings for the default city, timezone, and origin, and use the current-location context when the user says they are starting from their current position. For every travel plan, call get_weather_reference for the destination city or cities and make the weather summary and action advice explicit. Weather is evidence, not a guarantee; if the API only provides current/reference conditions, say so.
-Before calling get_transit_route, get_driving_route, get_walking_route, or get_bicycling_route, resolve both endpoints to lng,lat coordinates with search_poi. Compare self-drive and public transit whenever the route is meaningfully comparable. Use get_driving_route for self-drive and get_transit_route for public transit, then choose driving, transit, or mixed with a reason. Use walking or bicycling for local last-mile segments when appropriate and adapt to weather.
-Search POIs before naming specific attractions, lodging, or food venues. Recommend both natural and cultural attractions when the destination offers them, and explain the reason for each recommendation, the best visiting time, suggested stay, and any weather note. Search practical lodging areas and local food options; do not invent venue-specific facts when evidence is missing. Add concrete pitfalls covering tickets/reservations, peak periods, parking or transit, weather, and other destination-specific friction when relevant.
-For a normal one-to-three-day request, keep evidence bounded: make one weather call, search at most six representative attraction or practical-place keywords plus one lodging and one food keyword, and call each main driving/transit comparison at most once. Once you have enough evidence for a natural attraction, a cultural attraction, lodging, food, weather, and both transport options, stop searching and immediately call create_trip. Do not search every possible option or repeat an equivalent route call.
-The create_trip call is mandatory. In travel mode it must include a complete travelPlan object with destination, summary, weather, transport.driving, transport.transit, attractions, lodging, food, and pitfalls. Stops and legs must form a chronological itinerary; use stop notes for day/order context and route rationale for transport decisions. When a later message changes travel recommendations, pass an updated travelPlan to update_trip_summary or replace_trip_stops/replace_trip_legs so the visible plan stays consistent.
+Use read_settings for the default city, timezone, and origin, and use the current-location context when the user says they are starting from their current position. Call get_weather_reference early: its result contains live weather and the available multi-day forecast. Weather is dynamic evidence, not a static label or guarantee. Map the forecast to each itinerary day, populate weather.forecast, and add weather.routeRisks for every meaningful self-drive leg with drivingAdvice and a concrete action. Set dynamicMonitoring to true and state a refreshPolicy such as rechecking before departure and at every scheduled route review. If the forecast horizon does not cover the trip, explicitly mark the later days as unknown and require a refresh before departure.
+Self-driving is a time-varying process. Before calling get_transit_route, get_driving_route, get_walking_route, or get_bicycling_route, resolve both endpoints to lng,lat coordinates with search_poi. Compare self-drive and public transit whenever the route is meaningfully comparable. Use get_driving_route for self-drive and get_transit_route for public transit, then choose driving, transit, or mixed with a reason. Treat route duration and weather as snapshots: avoid claiming that a route is guaranteed, and make bad-weather actions explicit, such as postponing an exposed segment, switching to transit, adding indoor stops, or checking road and parking conditions again.
+Natural scenery is a hard output requirement, not an optional extra. Call search_natural_attractions once before selecting attractions. It searches multiple nature categories for you. Recommend at least three distinct natural candidates for a one-to-three-day trip, at least four for a trip of four days or longer, and at least one cultural candidate. Cover different natural types when the destination supports them, such as mountain, lake, forest, wetland, coast, island, canyon, waterfall, park, or viewpoint. The application rejects a travel plan that has too few natural candidates, so do not stop after finding one scenic spot. Use the evidence returned by tools; do not invent venue-specific facts.
+Search POIs before naming specific lodging or food venues. Explain the reason for every attraction, its best visiting time, suggested stay, and weather note. Search practical lodging areas and local food options. Add concrete pitfalls covering tickets/reservations, peak periods, parking or transit, weather, road conditions, and other destination-specific friction when relevant.
+For a normal one-to-three-day request, keep evidence bounded but sufficient: make one initial weather call, one broad natural-attraction search, at most ten representative attraction or practical-place keyword searches plus one lodging and one food keyword, and call each main driving/transit comparison at most once. Once you have the weather forecast, at least three natural candidates, a cultural candidate, lodging, food, and both transport options, stop searching and immediately call create_trip. Do not search every possible option or repeat an equivalent route call.
+The create_trip call is mandatory. In travel mode it must include a complete travelPlan object with destination, summary, weather including forecast and routeRisks, transport.driving, transport.transit, attractions, lodging, food, and pitfalls. Stops and legs must form a chronological itinerary; use stop notes for day/order context and route rationale for transport decisions. During a later route recheck, call get_weather_reference again before deciding. If weather, traffic, or road conditions change, update the route and pass the refreshed travelPlan to update_trip_summary or replace_trip_stops/replace_trip_legs so the visible plan stays consistent.
 Final user-facing replies must be plain text without Markdown formatting, headings, code ticks, or list markers.`;
 
 function getSystemPrompt(purpose: AgentPlanningPurpose) {
@@ -897,6 +952,10 @@ function normalizeCreateTripInput(
     throw new Error("旅行规划必须提供结构化 travelPlan。");
   }
 
+  if (context.purpose === "travel" && travelPlan) {
+    assertTravelPlanAttractionCoverage(travelPlan);
+  }
+
   return {
     userId: context.userId,
     agentSessionId: context.sessionId,
@@ -1018,6 +1077,10 @@ async function normalizeReplaceRouteInput(
       ? parseTravelPlanJson(current.trip.travelPlanJson)
       : normalizeTravelPlan(args.travelPlan);
 
+  if (context.purpose === "travel" && travelPlan) {
+    assertTravelPlanAttractionCoverage(travelPlan);
+  }
+
   if (!stops.length || !legs.length) {
     throw new Error(
       "Replacing stops or legs requires complete route data or an existing route to merge with."
@@ -1110,6 +1173,44 @@ async function executeToolCall(
     });
   }
 
+  if (name === "search_natural_attractions") {
+    const city = readOptionalString(args, "city") ?? settings.defaultCity;
+    const requestedLimit = readOptionalNumber(args, "limit") ?? 12;
+    const limit = Math.min(12, Math.max(3, requestedLimit));
+
+    return recordToolCall({
+      agentSessionId: context.sessionId,
+      name,
+      request: {
+        city,
+        limit,
+        keywordGroups: NATURAL_ATTRACTION_SEARCH_GROUPS,
+      },
+      signal: context.signal,
+      run: async () => {
+        const batches = await Promise.all(
+          NATURAL_ATTRACTION_SEARCH_GROUPS.map((keywords) =>
+            amap.searchPoi({ keywords, city })
+          )
+        );
+        const seen = new Set<string>();
+
+        return batches
+          .flat()
+          .filter((poi) => {
+            const key = poi.id || `${poi.name}:${poi.lngLat}`;
+            if (seen.has(key)) {
+              return false;
+            }
+
+            seen.add(key);
+            return true;
+          })
+          .slice(0, limit);
+      },
+    });
+  }
+
   if (name === "get_poi_detail") {
     const request = { id: readString(args, "id") };
     return recordToolCall({
@@ -1196,6 +1297,15 @@ async function executeToolCall(
 
   if (name === "update_trip_summary") {
     const tripId = readTripId(args, context);
+    const travelPlan =
+      args.travelPlan === undefined
+        ? undefined
+        : normalizeTravelPlan(args.travelPlan);
+
+    if (context.purpose === "travel" && travelPlan) {
+      assertTravelPlanAttractionCoverage(travelPlan);
+    }
+
     const request = {
       tripId,
       userId: context.userId,
@@ -1203,10 +1313,7 @@ async function executeToolCall(
       finalStopName: readOptionalString(args, "finalStopName"),
       targetArriveAt: readOptionalDate(args, "targetArriveAt"),
       status: readOptionalString(args, "status"),
-      travelPlan:
-        args.travelPlan === undefined
-          ? undefined
-          : normalizeTravelPlan(args.travelPlan),
+      travelPlan,
     };
     return recordToolCall({
       agentSessionId: context.sessionId,
@@ -1376,6 +1483,10 @@ async function runConversationAttempt(input: {
     const completion = await input.chatClient.complete({
       messages: input.messages,
       tools: TOOL_DEFINITIONS,
+      model:
+        input.context.purpose === "travel"
+          ? TRAVEL_PLANNING_MODEL
+          : undefined,
       signal: input.signal,
     });
     const assistantMessage = completion.message;

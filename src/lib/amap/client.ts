@@ -8,6 +8,7 @@ import type {
   RouteMode,
   RouteRequest,
   RouteResult,
+  WeatherForecast,
   WeatherRequest,
   WeatherReference
 } from "./types";
@@ -90,6 +91,67 @@ const formatRouteMode = (mode: RouteMode): string => {
 
   return labels[mode] ?? "通勤";
 };
+
+const toOptionalWeatherNumber = (value: unknown) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+};
+
+type AmapWeatherCast = {
+  date?: string;
+  week?: string;
+  dayweather?: string;
+  nightweather?: string;
+  daytemp?: string | number;
+  nighttemp?: string | number;
+  daywind?: string;
+  nightwind?: string;
+  daypower?: string;
+  nightpower?: string;
+};
+
+function toWeatherForecast(cast: AmapWeatherCast): WeatherForecast | null {
+  const date = cast.date?.trim();
+  if (!date) {
+    return null;
+  }
+
+  const dayWeather = cast.dayweather?.trim() || undefined;
+  const nightWeather = cast.nightweather?.trim() || undefined;
+  const dayTemperature = toOptionalWeatherNumber(cast.daytemp);
+  const nightTemperature = toOptionalWeatherNumber(cast.nighttemp);
+  const temperature =
+    dayTemperature !== undefined && nightTemperature !== undefined
+      ? `${nightTemperature}~${dayTemperature}°C`
+      : dayTemperature !== undefined
+        ? `${dayTemperature}°C`
+        : undefined;
+  const summary = [
+    dayWeather || nightWeather,
+    dayWeather && nightWeather && dayWeather !== nightWeather
+      ? `夜间${nightWeather}`
+      : undefined,
+    temperature,
+    cast.daywind?.trim() ? `${cast.daywind.trim()}风` : undefined,
+    cast.daypower?.trim() ? `${cast.daypower.trim()}级` : undefined,
+  ]
+    .filter(Boolean)
+    .join("，");
+
+  return {
+    date,
+    week: cast.week?.trim() || undefined,
+    dayWeather,
+    nightWeather,
+    dayTemperature,
+    nightTemperature,
+    dayWind: cast.daywind?.trim() || undefined,
+    nightWind: cast.nightwind?.trim() || undefined,
+    dayPower: cast.daypower?.trim() || undefined,
+    nightPower: cast.nightpower?.trim() || undefined,
+    summary: summary || `${date} 暂无天气预报`,
+  };
+}
 
 const toPoi = (poi: AmapPoi): Poi => ({
   id: poi.id ?? poi.name ?? "amap-poi",
@@ -273,26 +335,37 @@ export function createRealAmapClient(options: AmapClientOptions): AmapClient {
             winddirection?: string;
             windpower?: string;
           }>;
+          forecasts?: Array<{
+            city?: string;
+            reporttime?: string;
+            casts?: AmapWeatherCast[];
+          }>;
         }
       >(`${BASE_URL}/weather/weatherInfo`, {
         city,
-        extensions: "base",
+        extensions: "all",
         output: "json"
       });
 
       const live = data.lives?.[0];
-      const weatherCity = live?.city ?? city;
+      const forecastEnvelope = data.forecasts?.[0];
+      const weatherCity = live?.city ?? forecastEnvelope?.city ?? city;
       const summaryParts = [
         live?.weather,
         live?.temperature ? `${live.temperature}°C` : undefined,
         live?.winddirection ? `${live.winddirection}风` : undefined,
         live?.windpower ? `${live.windpower}级` : undefined
       ].filter(Boolean);
+      const forecast = (forecastEnvelope?.casts ?? [])
+        .map(toWeatherForecast)
+        .filter((cast): cast is WeatherForecast => Boolean(cast));
 
       return {
         kind: "reference",
         city: weatherCity,
         summary: summaryParts.join(", ") || `${weatherCity} 暂无天气信息`,
+        observedAt: new Date().toISOString(),
+        forecast,
         raw: data
       };
     },
