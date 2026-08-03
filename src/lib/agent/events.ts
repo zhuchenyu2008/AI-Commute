@@ -33,6 +33,7 @@ export function formatAgentToolName(name: string) {
     create_memory_candidate: "记录记忆候选",
     create_trip: "创建行程",
     get_bicycling_route: "查询骑行路线",
+    get_driving_route: "查询驾车路线",
     get_poi_detail: "读取地点详情",
     get_transit_route: "查询公交/地铁路线",
     get_walking_route: "查询步行路线",

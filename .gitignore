@@ -12,3 +12,5 @@ data/
 debug.log
 test-results/
 .worktrees/
+
+# Local deployment overrides (port remapping etc.)

@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     value: "",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // COOKIE_SECURE override: must match login route for cookie to be cleared over HTTP.
+    secure: process.env.COOKIE_SECURE === "true" || (process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false"),
     path: "/",
     maxAge: 0
   });

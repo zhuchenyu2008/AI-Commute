@@ -69,17 +69,21 @@ describe("createMockAmapClient", () => {
     };
 
     const transit = await client.getTransitRoute(routeRequest);
+    const driving = await client.getDrivingRoute(routeRequest);
     const walking = await client.getWalkingRoute(routeRequest);
     const bicycling = await client.getBicyclingRoute(routeRequest);
 
     expect(transit.durationMinutes).toBeGreaterThan(0);
     expect(transit.summary).toContain("公交/地铁路线");
+    expect(driving.durationMinutes).toBeGreaterThan(0);
+    expect(driving.summary).toContain("驾车路线");
     expect(walking.durationMinutes).toBeGreaterThan(0);
     expect(walking.summary).toContain("步行路线");
     expect(bicycling.durationMinutes).toBeGreaterThan(0);
     expect(bicycling.summary).toContain("骑行路线");
-    expect([transit.mode, walking.mode, bicycling.mode]).toEqual([
+    expect([transit.mode, driving.mode, walking.mode, bicycling.mode]).toEqual([
       "transit",
+      "driving",
       "walking",
       "bicycling"
     ]);
@@ -114,6 +118,9 @@ describe("createAmapClient", () => {
         throw new Error("network down");
       }),
       getTransitRoute: vi.fn(async () => {
+        throw new Error("network down");
+      }),
+      getDrivingRoute: vi.fn(async () => {
         throw new Error("network down");
       }),
       getWalkingRoute: vi.fn(async () => {
@@ -171,6 +178,38 @@ describe("createRealAmapClient", () => {
       })
     );
     expect(new URL(requests[0]).searchParams.get("cityd")).toBe("杭州");
+  });
+
+  it("calls the AMap driving endpoint and converts path duration", async () => {
+    const requests: string[] = [];
+    const client = createRealAmapClient({
+      apiKey: "test-key",
+      throttle: { schedule: (job) => job() },
+      fetchImpl: vi.fn(async (url: string) => {
+        requests.push(url);
+        return new Response(
+          JSON.stringify({
+            status: "1",
+            route: { paths: [{ duration: "360" }] },
+          })
+        );
+      }) as typeof fetch,
+    });
+
+    const route = await client.getDrivingRoute({
+      origin: "121.1,29.1",
+      destination: "121.2,29.2",
+    });
+
+    expect(route).toMatchObject({
+      mode: "driving",
+      durationMinutes: 6,
+      summary: "驾车路线来自高德",
+    });
+    expect(new URL(requests[0]).pathname).toBe("/v3/direction/driving");
+    expect(new URL(requests[0]).searchParams.get("origin")).toBe(
+      "121.1,29.1"
+    );
   });
 
   it("throws on AMap status failures", async () => {

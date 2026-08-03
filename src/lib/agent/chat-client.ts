@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { TravelPlan } from "@/lib/trips/travel-plan";
 
 export type AgentChatRole = "system" | "user" | "assistant" | "tool";
 
@@ -396,6 +397,158 @@ function getFallbackTravelMode(messages: AgentChatMessage[]): FallbackTravelMode
   return "transit";
 }
 
+function isFallbackTravelSession(messages: AgentChatMessage[]) {
+  return messages.some(
+    (message) =>
+      message.role === "system" &&
+      message.content.includes("personal travel-itinerary planning AI")
+  );
+}
+
+function readFallbackToolPayload(
+  toolMessages: AgentChatMessage[],
+  toolCallId: string
+) {
+  const message = toolMessages.find(
+    (candidate) => candidate.toolCallId === toolCallId
+  );
+
+  if (!message) return {};
+
+  try {
+    const parsed = JSON.parse(message.content) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function readFallbackRouteDuration(
+  toolMessages: AgentChatMessage[],
+  toolCallId: string,
+  fallback: number
+) {
+  const duration = Number(
+    readFallbackToolPayload(toolMessages, toolCallId).durationMinutes
+  );
+
+  return Number.isFinite(duration) && duration > 0
+    ? Math.round(duration)
+    : fallback;
+}
+
+function readFallbackRouteSummary(
+  toolMessages: AgentChatMessage[],
+  toolCallId: string,
+  fallback: string
+) {
+  const summary = readFallbackToolPayload(toolMessages, toolCallId).summary;
+  return typeof summary === "string" && summary.trim() ? summary : fallback;
+}
+
+function buildFallbackTravelPlan(input: {
+  destination: FallbackDestination;
+  weatherSummary: string;
+  drivingMinutes: number;
+  drivingSummary: string;
+  transitMinutes: number;
+  transitSummary: string;
+}): TravelPlan {
+  const recommended =
+    input.drivingMinutes <= input.transitMinutes ? "driving" : "transit";
+  const recommendedLabel = recommended === "driving" ? "自驾" : "公共交通";
+
+  return {
+    destination: input.destination.name,
+    summary:
+      "这是无外部大模型配置时的本地演示旅行规划，展示天气、交通、景点、住宿、美食和避坑信息的完整结构。",
+    days: 2,
+    weather: {
+      city: "宁波",
+      summary: input.weatherSummary,
+      advice: "天气仅作参考：自然景点按实时情况调整，出发前再次确认降雨、风力和景区公告。",
+      source: "高德天气参考",
+    },
+    transport: {
+      recommended,
+      reason: `${recommendedLabel}预计更省时；已同时保留自驾与公共交通方案，最终请结合停车、拥堵、换乘和天气确认。`,
+      driving: {
+        summary: `约 ${input.drivingMinutes} 分钟`,
+        reason: "适合携带行李或串联郊区景点，但需提前确认停车和高峰拥堵。",
+        durationMinutes: input.drivingMinutes,
+        route: input.drivingSummary,
+      },
+      transit: {
+        summary: `约 ${input.transitMinutes} 分钟`,
+        reason: "适合市区活动，减少停车压力；雨天需给站外步行和换乘留余量。",
+        durationMinutes: input.transitMinutes,
+        route: input.transitSummary,
+      },
+      localMovement: "市区景点之间优先公共交通，最后一公里根据天气选择步行或短途接驳。",
+    },
+    attractions: [
+      {
+        name: "东钱湖",
+        category: "natural",
+        reason: "适合安排半天自然景观，节奏舒缓，也方便根据天气缩短湖畔停留。",
+        address: "宁波东钱湖景区",
+        day: 1,
+        stayMinutes: 180,
+        bestTime: "上午或傍晚",
+        weatherNote: "雨天减少湖边长距离步行，关注临时开放信息。",
+      },
+      {
+        name: "天一阁",
+        category: "cultural",
+        reason: "补足宁波历史人文内容，室内与园林结合，适合放在天气不稳定的一天。",
+        address: "宁波天一阁博物院",
+        day: 2,
+        stayMinutes: 120,
+        bestTime: "上午",
+        weatherNote: "闭馆日、预约和客流以官方公告为准。",
+      },
+    ],
+    lodging: [
+      {
+        name: "市中心住宿区",
+        area: "天一广场或鼓楼周边",
+        reason: "公共交通和餐饮更集中，适合两天行程减少往返。",
+        budget: "按预算选择连锁或精品酒店",
+        notes: "订房前核对停车、取消政策和周末价格。",
+      },
+    ],
+    food: [
+      {
+        name: "宁波本帮菜",
+        area: "鼓楼、天一广场周边",
+        mustTry: "海鲜、宁波汤圆",
+        reason: "覆盖本地口味代表，适合安排在市区活动日。",
+        budget: "先看菜单和人均价格",
+        notes: "海鲜按时价结算，点单前确认规格和加工费。",
+      },
+    ],
+    pitfalls: [
+      {
+        title: "景区预约与开放时间",
+        detail: "热门景点、博物馆和节假日活动可能需要预约，出发前查官方公告。",
+        severity: "high",
+      },
+      {
+        title: "自驾停车与拥堵",
+        detail: "郊区景点周末停车位可能紧张，市区行程不要只按驾车导航时间倒排。",
+        severity: "medium",
+      },
+      {
+        title: "海鲜价格与加工费",
+        detail: "海鲜、时价菜和加工项目先问清单价、重量和服务费，保留消费凭证。",
+        severity: "medium",
+      },
+    ],
+  };
+}
+
 function getFallbackRouteToolName(mode: FallbackTravelMode) {
   if (mode === "bicycling") return "get_bicycling_route";
   if (mode === "walking") return "get_walking_route";
@@ -440,13 +593,17 @@ export function createFallbackChatClient(): AgentChatClient {
     async complete({ messages }) {
       const toolMessages = messages.filter((message) => message.role === "tool");
       const currentTripId = getFallbackCurrentTripId(messages);
+      const isTravelSession = isFallbackTravelSession(messages);
+      const destination = getFallbackDestination(messages);
 
       if (toolMessages.length === 0) {
         return {
           message: {
             role: "assistant",
             content:
-              "mock agent 读取设置、记忆、地点和天气。天气仅作为参考信息，不由应用层写死路线排序。",
+              isTravelSession
+                ? "mock agent 读取设置、地点和天气，准备旅行方案。"
+                : "mock agent 读取设置、记忆、地点和天气。天气仅作为参考信息，不由应用层写死路线排序。",
             toolCalls: [
               {
                 id: "mock-read-settings",
@@ -461,7 +618,7 @@ export function createFallbackChatClient(): AgentChatClient {
               {
                 id: "mock-search-poi",
                 name: "search_poi",
-                arguments: { keywords: "龙湖天街", city: "宁波" },
+                arguments: { keywords: destination.name, city: "宁波" },
               },
               {
                 id: "mock-weather",
@@ -489,7 +646,6 @@ export function createFallbackChatClient(): AgentChatClient {
         ? `公交/地铁路线：${originName} 到 宁波龙湖天街`
         : "公交/地铁路线：前往宁波龙湖天街";
 
-      const destination = getFallbackDestination(messages);
       const travelMode = getFallbackTravelMode(messages);
       const routeMinutes = getFallbackRouteMinutes(travelMode);
       const bufferMinutes = getFallbackBufferMinutes(travelMode);
@@ -515,6 +671,181 @@ export function createFallbackChatClient(): AgentChatClient {
       const firstStopArriveAt = targetArriveAts[0] ?? targetArriveAt;
       const isSchoolOfficeTrip = isFallbackSchoolOfficePrompt(messages);
       const isCoffeeLonghuTrip = isFallbackCoffeeLonghuPrompt(messages);
+
+      if (isTravelSession) {
+        const drivingCallId = "mock-travel-driving";
+        const transitCallId = "mock-travel-transit";
+        const routeToolCalls = [];
+
+        if (!toolMessages.some((message) => message.toolCallId === drivingCallId)) {
+          routeToolCalls.push({
+            id: drivingCallId,
+            name: "get_driving_route",
+            arguments: {
+              origin: originLngLat,
+              destination: destination.lngLat,
+              city: "宁波",
+              cityd: "宁波",
+            },
+          });
+        }
+
+        if (!toolMessages.some((message) => message.toolCallId === transitCallId)) {
+          routeToolCalls.push({
+            id: transitCallId,
+            name: "get_transit_route",
+            arguments: {
+              origin: originLngLat,
+              destination: destination.lngLat,
+              city: "宁波",
+              cityd: "宁波",
+            },
+          });
+        }
+
+        if (routeToolCalls.length > 0) {
+          return {
+            message: {
+              role: "assistant",
+              content: "mock agent 对比自驾和公共交通路线。",
+              toolCalls: routeToolCalls,
+            },
+          };
+        }
+
+        const drivingMinutes = readFallbackRouteDuration(
+          toolMessages,
+          drivingCallId,
+          36
+        );
+        const transitMinutes = readFallbackRouteDuration(
+          toolMessages,
+          transitCallId,
+          42
+        );
+        const travelPlan = buildFallbackTravelPlan({
+          destination,
+          weatherSummary:
+            typeof readFallbackToolPayload(toolMessages, "mock-weather").summary ===
+            "string"
+              ? String(readFallbackToolPayload(toolMessages, "mock-weather").summary)
+              : "宁波天气暂无更多信息，仅作参考。",
+          drivingMinutes,
+          drivingSummary: readFallbackRouteSummary(
+            toolMessages,
+            drivingCallId,
+            "驾车路线来自本地演示数据"
+          ),
+          transitMinutes,
+          transitSummary: readFallbackRouteSummary(
+            toolMessages,
+            transitCallId,
+            "公交/地铁路线来自本地演示数据"
+          ),
+        });
+        const recommendedOption =
+          travelPlan.transport.recommended === "driving"
+            ? travelPlan.transport.driving
+            : travelPlan.transport.transit;
+        const routeMinutes = recommendedOption.durationMinutes ?? transitMinutes;
+        const bufferMinutes = 15;
+        const routeInput = {
+          order: 1,
+          originName,
+          originLngLat,
+          destinationName: destination.name,
+          destinationLngLat: destination.lngLat,
+          targetArriveAt,
+          routeMinutes,
+          bufferMinutes,
+          totalMinutes: routeMinutes + bufferMinutes,
+          mode: travelPlan.transport.recommended,
+          routeTitle: recommendedOption.route,
+          routeRationale: travelPlan.transport.reason,
+          segmentTitle: `${travelPlan.transport.recommended === "driving" ? "自驾" : "公共交通"}前往${destination.name}`,
+          segmentDetail: "mock agent 根据天气和两种路线证据生成旅行演示行程。",
+          segmentSource: "amap",
+          source: { source: "mock-agent" },
+          bufferComponents: [
+            {
+              category: "venue",
+              label: "到场缓冲",
+              minutes: 5,
+              reason: "预留景区入口、停车或进站后的步行时间。",
+              source: "agent_inference",
+            },
+            {
+              category: "transfer",
+              label: "换乘/停车缓冲",
+              minutes: 10,
+              reason: "预留换乘、停车和行李整理等旅行摩擦。",
+              source: "agent_inference",
+            },
+            {
+              category: "weather_context",
+              label: "天气参考",
+              minutes: 0,
+              reason: "天气仅作为参考，出发前重新确认。",
+              source: "weather_context",
+            },
+          ],
+        };
+        const toolName = currentTripId ? "replace_trip_legs" : "create_trip";
+
+        return {
+          message: {
+            role: "assistant",
+            content: currentTripId
+              ? "mock agent 更新旅行演示行程。"
+              : "mock agent 创建旅行演示行程。",
+            toolCalls: [
+              {
+                id: currentTripId ? "mock-replace-trip" : "mock-create-trip",
+                name: toolName,
+                arguments: currentTripId
+                  ? {
+                      tripId: currentTripId,
+                      title: destination.name,
+                      targetArriveAt,
+                      finalStopName: destination.name,
+                      stops: [
+                        {
+                          order: 1,
+                          name: destination.name,
+                          address: destination.address,
+                          lngLat: destination.lngLat,
+                          targetArriveAt,
+                          kind: "destination",
+                          notes: "第 1 天至第 2 天旅行规划目的地。",
+                        },
+                      ],
+                      legs: [routeInput],
+                      travelPlan,
+                    }
+                  : {
+                      title: destination.name,
+                      timezone: "Asia/Shanghai",
+                      targetArriveAt,
+                      finalStopName: destination.name,
+                      stops: [
+                        {
+                          order: 1,
+                          name: destination.name,
+                          address: destination.address,
+                          lngLat: destination.lngLat,
+                          targetArriveAt,
+                          kind: "destination",
+                          notes: "第 1 天至第 2 天旅行规划目的地。",
+                        },
+                      ],
+                      legs: [routeInput],
+                      travelPlan,
+                    },
+              },
+            ],
+          },
+        };
+      }
 
       if (!toolMessages.some((message) => message.toolCallId === "mock-route")) {
         return {

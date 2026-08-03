@@ -38,7 +38,7 @@ export type ReverseGeocodeResult = {
   raw?: unknown;
 };
 
-export type RouteMode = "transit" | "walking" | "bicycling";
+export type RouteMode = "transit" | "driving" | "walking" | "bicycling";
 
 export type RouteRequest = {
   origin: string;
@@ -60,6 +60,7 @@ export type AmapClient = {
   getWeather(request: WeatherRequest): Promise<WeatherReference>;
   reverseGeocode(request: ReverseGeocodeRequest): Promise<ReverseGeocodeResult>;
   getTransitRoute(request: RouteRequest): Promise<RouteResult>;
+  getDrivingRoute(request: RouteRequest): Promise<RouteResult>;
   getWalkingRoute(request: RouteRequest): Promise<RouteResult>;
   getBicyclingRoute(request: RouteRequest): Promise<RouteResult>;
 };

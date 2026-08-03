@@ -75,6 +75,50 @@ describe("agent planning sessions", () => {
     ).resolves.toBe(0);
   });
 
+  it("starts travel planning without requiring a default commute origin", async () => {
+    const { POST } = await import("@app/api/agent-sessions/route");
+    const user = await prisma.user.create({
+      data: {
+        email: `travel-origin-optional-${Date.now()}@example.com`,
+        name: "Travel Origin Optional User",
+        passwordHash: "hash",
+        settings: {
+          create: {
+            defaultCity: "Ningbo",
+            timezone: "Asia/Shanghai",
+            originName: null,
+            originLngLat: null,
+            routePreference: "balanced",
+          },
+        },
+      },
+      include: { settings: true },
+    });
+    getCurrentUserMock.mockResolvedValue(user);
+
+    const response = await POST(
+      new Request("http://localhost/api/agent-sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          prompt: "规划宁波两日旅行",
+          purpose: "travel",
+        }),
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.sessionId).toEqual(expect.any(String));
+    await expect(
+      prisma.agentSession.findUniqueOrThrow({
+        where: { id: payload.sessionId },
+      })
+    ).resolves.toMatchObject({
+      userId: user.id,
+      purpose: "travel",
+    });
+  });
+
   it("starts a visible running session with the initial user message", async () => {
     const user = await prisma.user.create({
       data: {
@@ -572,6 +616,43 @@ describe("agent planning sessions", () => {
     expect(routeToolDescriptions).toEqual(
       routeToolDescriptions.map(() => expect.stringContaining("lng,lat"))
     );
+  });
+
+  it("bounds travel evidence gathering and exposes the driving comparison tool", async () => {
+    const user = await createUserWithSettings("agent-travel-prompt");
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "规划宁波两日旅行",
+      purpose: "travel",
+    });
+    let systemText = "";
+    let toolNames: string[] = [];
+    let createTripParameters = "";
+    const chatClient: AgentChatClient = {
+      async complete({ messages, tools }) {
+        systemText = messages
+          .filter((message) => message.role === "system")
+          .map((message) => message.content)
+          .join("\n");
+        toolNames = tools.map((tool) => tool.name);
+        createTripParameters = JSON.stringify(
+          tools.find((tool) => tool.name === "create_trip")?.parameters
+        );
+        throw new Error("stop after travel prompt capture");
+      },
+    };
+
+    const result = await runPlanningSession(session.id, {
+      amapClient,
+      chatClient,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(systemText).toContain("one-to-three-day request");
+    expect(systemText).toContain("at most six representative");
+    expect(systemText).toContain("immediately call create_trip");
+    expect(toolNames).toContain("get_driving_route");
+    expect(createTripParameters).toContain("travelPlan");
   });
 
   it("lets the AI choose AMap tools, route mode, and buffer details", async () => {

@@ -29,6 +29,7 @@ type AgentSessionPayload = {
   id: string;
   tripId?: string | null;
   status: string;
+  purpose?: string;
   prompt: string;
   messages: AgentMessageEventSource[];
   toolCalls: AgentToolCallEventSource[];
@@ -250,6 +251,7 @@ export function AgentEventList({
   const viewState = getAgentSessionViewState({ autoRedirect, session });
   const isSendDisabled = isSending || viewState.status === "running";
   const canSendMessages = allowMessages ?? !autoRedirect;
+  const isTravel = session?.purpose === "travel";
 
   return (
     <section className="space-y-4">
@@ -259,7 +261,7 @@ export function AgentEventList({
             智能体会话
           </p>
           <h1 className="mt-1 text-2xl font-bold text-[#191c1e]">
-            正在规划你的通勤
+            {isTravel ? "正在规划你的旅行" : "正在规划你的通勤"}
           </h1>
         </div>
         <div className="flex items-center gap-2 rounded-full bg-[#dae2fd] px-3 py-2 text-sm font-bold text-[#3f465c]">
@@ -290,7 +292,11 @@ export function AgentEventList({
               className="min-w-0 flex-1 rounded-full bg-[#f2f4f6] px-4 py-3 text-sm font-medium text-[#191c1e] outline-none ring-[#2563eb]/20 transition placeholder:text-[#737686] focus:bg-white focus:ring-4"
               disabled={isSendDisabled}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder="继续补充你的通勤需求"
+              placeholder={
+                isTravel
+                  ? "继续补充预算、节奏或旅行偏好"
+                  : "继续补充你的通勤需求"
+              }
               value={message}
             />
             <button

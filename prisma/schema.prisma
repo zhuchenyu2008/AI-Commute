@@ -109,6 +109,7 @@ model Trip {
   agentSessionId  String?
   title           String
   rawPrompt       String
+  travelPlanJson  String?
   status          String             @default("planning")
   timezone        String
   targetArriveAt  DateTime?
@@ -366,4 +367,3 @@ model MemoryCandidate {
   @@index([userId])
   @@index([status])
 }
-

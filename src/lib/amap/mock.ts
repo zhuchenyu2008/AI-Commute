@@ -28,6 +28,7 @@ const clonePoi = (poi: Poi): Poi => ({
 const formatRouteMode = (mode: RouteResult["mode"]) => {
   const labels: Record<RouteResult["mode"], string> = {
     bicycling: "骑行",
+    driving: "驾车",
     transit: "公交/地铁",
     walking: "步行",
   };
@@ -103,6 +104,10 @@ export function createMockAmapClient(): AmapClient {
 
     async getTransitRoute(request: RouteRequest): Promise<RouteResult> {
       return createRoute(request, "transit", 42);
+    },
+
+    async getDrivingRoute(request: RouteRequest): Promise<RouteResult> {
+      return createRoute(request, "driving", 36);
     },
 
     async getWalkingRoute(request: RouteRequest): Promise<RouteResult> {

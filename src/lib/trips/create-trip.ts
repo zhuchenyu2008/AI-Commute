@@ -105,6 +105,7 @@ export async function createPlannedTrip(input: CreatePlannedTripInput) {
         agentSessionId: input.agentSessionId,
         title: normalizedTitle,
         rawPrompt: input.rawPrompt,
+        travelPlanJson: serialize(input.travelPlan),
         status: "monitoring",
         timezone: input.timezone,
         targetArriveAt: input.targetArriveAt,

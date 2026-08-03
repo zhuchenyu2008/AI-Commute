@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { createPlannedTrip } from "@/lib/trips/create-trip";
+import type { TravelPlan } from "@/lib/trips/travel-plan";
 import { ensureTestDatabase } from "./test-db";
 
 describe("createPlannedTrip", () => {
@@ -224,6 +225,119 @@ describe("createPlannedTrip", () => {
       )?.minutes
     ).toBe(0);
     expect(persisted.legs[0].reminderJobs).toHaveLength(6);
+  });
+
+  it("persists the structured travel plan alongside the itinerary graph", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `trip-travel-plan-${Date.now()}@example.com`,
+        name: "旅行规划用户",
+        passwordHash: "hash",
+      },
+    });
+    const travelPlan: TravelPlan = {
+      destination: "宁波",
+      summary: "两天旅行规划",
+      days: 2,
+      weather: {
+        city: "宁波",
+        summary: "多云，24°C",
+        advice: "自然景点留意降雨",
+        source: "高德天气参考",
+      },
+      transport: {
+        recommended: "mixed",
+        reason: "郊区自驾与市区公共交通结合",
+        driving: {
+          summary: "约 36 分钟",
+          reason: "方便串联郊区景点",
+          durationMinutes: 36,
+        },
+        transit: {
+          summary: "约 48 分钟",
+          reason: "市区停车压力小",
+          durationMinutes: 48,
+        },
+        localMovement: "市内优先公共交通",
+      },
+      attractions: [
+        {
+          name: "东钱湖",
+          category: "natural",
+          reason: "自然景观",
+          day: 1,
+        },
+        {
+          name: "天一阁",
+          category: "cultural",
+          reason: "历史人文",
+          day: 2,
+        },
+      ],
+      lodging: [
+        {
+          name: "鼓楼周边",
+          area: "市中心",
+          reason: "交通和餐饮集中",
+        },
+      ],
+      food: [
+        {
+          name: "宁波本帮菜",
+          mustTry: "海鲜和汤圆",
+          reason: "本地口味代表",
+        },
+      ],
+      pitfalls: [
+        {
+          title: "先查预约",
+          detail: "热门景点先看官方公告",
+          severity: "high",
+        },
+      ],
+    };
+
+    const trip = await createPlannedTrip({
+      userId: user.id,
+      rawPrompt: "规划宁波两日旅行",
+      timezone: "Asia/Shanghai",
+      title: "宁波旅行",
+      finalStopName: "宁波",
+      stops: [
+        {
+          order: 1,
+          name: "宁波",
+          lngLat: "121.55,29.87",
+          kind: "destination",
+        },
+      ],
+      legs: [
+        {
+          order: 1,
+          originName: "北京",
+          originLngLat: "116.4,39.9",
+          destinationName: "宁波",
+          destinationLngLat: "121.55,29.87",
+          routeMinutes: 120,
+          mode: "mixed",
+        },
+      ],
+      travelPlan,
+    });
+
+    const persisted = await prisma.trip.findUniqueOrThrow({
+      where: { id: trip.id },
+    });
+
+    expect(persisted.travelPlanJson).toBe(JSON.stringify(travelPlan));
+    expect(JSON.parse(persisted.travelPlanJson ?? "null")).toMatchObject({
+      destination: "宁波",
+      transport: { recommended: "mixed" },
+      attractions: expect.arrayContaining([
+        expect.objectContaining({ category: "natural" }),
+        expect.objectContaining({ category: "cultural" }),
+      ]),
+    });
   });
 
   it("normalizes created trip titles to origin-destination", async () => {

@@ -43,10 +43,11 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
   const currentLocation = readCurrentLocation(body.currentLocation);
+  const purpose = body.purpose === "travel" ? "travel" : "planning";
 
   if (!prompt) {
     return NextResponse.json(
-      { error: "请输入通勤规划需求" },
+      { error: purpose === "travel" ? "请输入旅行规划需求" : "请输入通勤规划需求" },
       { status: 400 }
     );
   }
@@ -54,7 +55,10 @@ export async function POST(request: Request) {
   const settings = await prisma.userSettings.findUnique({
     where: { userId: user.id },
   });
-  if (!settings?.originName?.trim() || !settings.originLngLat?.trim()) {
+  if (
+    purpose !== "travel" &&
+    (!settings?.originName?.trim() || !settings.originLngLat?.trim())
+  ) {
     return NextResponse.json(
       {
         error:
@@ -68,6 +72,7 @@ export async function POST(request: Request) {
   const session = await startPlanningSession({
     userId: user.id,
     prompt,
+    purpose,
     currentLocation,
   });
 

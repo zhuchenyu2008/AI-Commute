@@ -150,6 +150,21 @@ async function ensureTripShareMigration() {
   }
 }
 
+async function ensureTravelPlanMigration() {
+  const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    "PRAGMA table_info('Trip')"
+  );
+  const hasTravelPlan = columns.some(
+    (column) => column.name === "travelPlanJson"
+  );
+
+  if (!hasTravelPlan) {
+    await executeMigration(
+      "prisma/migrations/20260803110000_travel_plan/migration.sql"
+    );
+  }
+}
+
 async function ensureUniqueTelegramChatIds() {
   const settings = await prisma.userSettings.findMany({
     where: { telegramChatId: { not: null } },
@@ -206,6 +221,7 @@ export async function ensureTestDatabase() {
       await ensureTelegramMigrations();
       await ensureRouteChangeThresholdMigration();
       await ensureTripShareMigration();
+      await ensureTravelPlanMigration();
     }
   });
 

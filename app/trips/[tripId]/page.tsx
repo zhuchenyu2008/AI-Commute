@@ -13,6 +13,7 @@ import { GlassCard } from "@/components/glass-card";
 import { BufferList } from "@/components/trips/buffer-list";
 import { MonitoringActions } from "@/components/trips/monitoring-actions";
 import { RouteTimeline } from "@/components/trips/route-timeline";
+import { TravelPlanCard } from "@/components/trips/travel-plan-card";
 import { TripDeleteButton } from "@/components/trips/trip-delete-button";
 import { TripShareButton } from "@/components/trips/trip-share-button";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/trips/monitoring";
 import { buildMapPath } from "@/lib/trips/map-path";
 import { toPublicTripShareData } from "@/lib/trips/share-view";
+import { parseTravelPlanJson } from "@/lib/trips/travel-plan";
 
 type TripPageProps = {
   params: Promise<{
@@ -213,6 +215,7 @@ export default async function TripDetailPage({
       : selectedCandidates[0]?.title;
   const mapPath = buildMapPath(primaryLeg?.originName, trip.stops);
   const publicTrip = toPublicTripShareData(trip);
+  const travelPlan = parseTravelPlanJson(trip.travelPlanJson);
 
   return (
     <AppShell active="history">
@@ -251,6 +254,8 @@ export default async function TripDetailPage({
             </div>
           </div>
         </header>
+
+        {travelPlan ? <TravelPlanCard plan={travelPlan} /> : null}
 
         <GlassCard className="p-5">
           <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">

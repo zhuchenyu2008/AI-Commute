@@ -19,7 +19,7 @@ services:
     environment:
       DATABASE_URL: file:/app/data/commute.db
     ports:
-      - "3000:3000"
+      - "3002:3000"
     volumes:
       - ./data:/app/data
     depends_on:

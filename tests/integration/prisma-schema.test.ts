@@ -15,6 +15,10 @@ describe("Prisma schema", () => {
     "prisma/migrations/20260720120000_trip_shares/migration.sql",
     "utf8"
   );
+  const travelPlanMigration = readFileSync(
+    "prisma/migrations/20260803110000_travel_plan/migration.sql",
+    "utf8"
+  );
 
   it("models the Agent-centered multi-stop trip graph", () => {
     for (const model of [
@@ -121,6 +125,13 @@ describe("Prisma schema", () => {
     );
     expect(tripShareMigration).toContain(
       'CREATE UNIQUE INDEX "TripShare_token_key"'
+    );
+  });
+
+  it("stores structured travel planning output on trips", () => {
+    expect(schema).toContain("travelPlanJson  String?");
+    expect(travelPlanMigration).toContain(
+      'ALTER TABLE "Trip" ADD COLUMN "travelPlanJson" TEXT;'
     );
   });
 });

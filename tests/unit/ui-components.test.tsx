@@ -32,6 +32,7 @@ import { MemoryDeleteButton } from "@/components/memories/memory-delete-button";
 import { BufferList } from "@/components/trips/buffer-list";
 import { TripDeleteButton } from "@/components/trips/trip-delete-button";
 import { RouteTimeline } from "@/components/trips/route-timeline";
+import { TravelPlanCard } from "@/components/trips/travel-plan-card";
 import { LoginForm } from "@app/login/login-form";
 import { credits } from "@app/settings/credits";
 import { ProjectAttribution } from "@app/settings/project-attribution";
@@ -455,6 +456,81 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain("到达前后可能有小雨");
   });
 
+  it("renders the travel planning card sections and transport comparison", () => {
+    const html = renderToStaticMarkup(
+      <TravelPlanCard
+        plan={{
+          destination: "宁波",
+          summary: "两天旅行规划",
+          days: 2,
+          weather: {
+            city: "宁波",
+            summary: "多云，24°C",
+            advice: "自然景点留意降雨",
+            source: "高德天气参考",
+          },
+          transport: {
+            recommended: "mixed",
+            reason: "郊区自驾与市区公共交通结合",
+            driving: {
+              summary: "约 36 分钟",
+              reason: "方便串联景点",
+              durationMinutes: 36,
+            },
+            transit: {
+              summary: "约 48 分钟",
+              reason: "市区停车压力小",
+              durationMinutes: 48,
+            },
+          },
+          attractions: [
+            {
+              name: "东钱湖",
+              category: "natural",
+              reason: "自然景观",
+            },
+            {
+              name: "天一阁",
+              category: "cultural",
+              reason: "历史人文",
+            },
+          ],
+          lodging: [
+            {
+              name: "鼓楼周边",
+              area: "市中心",
+              reason: "交通和餐饮集中",
+            },
+          ],
+          food: [
+            {
+              name: "宁波本帮菜",
+              mustTry: "海鲜和汤圆",
+              reason: "本地口味代表",
+            },
+          ],
+          pitfalls: [
+            {
+              title: "先查预约",
+              detail: "热门景点先看官方公告",
+              severity: "high",
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(html).toContain("旅行规划");
+    expect(html).toContain("天气参考");
+    expect(html).toContain("自驾方案");
+    expect(html).toContain("公共交通方案");
+    expect(html).toContain("自然景观");
+    expect(html).toContain("人文历史");
+    expect(html).toContain("住宿建议");
+    expect(html).toContain("美食建议");
+    expect(html).toContain("避坑提醒");
+  });
+
   it("renders route timeline segment titles", () => {
     const html = renderToStaticMarkup(
       <RouteTimeline
@@ -694,6 +770,38 @@ describe("sample-aligned UI components", () => {
     render(<CommuteInput />);
 
     expect(screen.getByRole("button", { name: "规划" })).toBeTruthy();
+  });
+
+  it("switches the home form to travel mode and submits its purpose", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        { sessionId: "travel-session", status: "running" },
+        { status: 201 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CommuteInput />);
+    fireEvent.click(screen.getByRole("tab", { name: "旅行" }));
+
+    const promptInput = screen.getByLabelText("搜索目的地");
+    expect((promptInput as HTMLInputElement).placeholder).toBe(
+      "去哪玩几天？如：周末自驾去承德"
+    );
+    fireEvent.change(promptInput, { target: { value: "周末去宁波两天" } });
+    fireEvent.click(screen.getByRole("button", { name: "规划旅行" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/agent-sessions",
+        expect.objectContaining({
+          body: JSON.stringify({
+            prompt: "周末去宁波两天",
+            purpose: "travel",
+          }),
+        })
+      );
+    });
   });
 
   it("keeps the home voice input control hidden", () => {

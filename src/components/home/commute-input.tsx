@@ -15,6 +15,8 @@ type CurrentLocationContext = {
   city?: string;
 };
 
+type PlanningPurpose = "planning" | "travel";
+
 export function getAgentStartResult(
   status: number,
   payload: { actionHref?: unknown; error?: unknown; sessionId?: unknown }
@@ -69,13 +71,15 @@ export function CommuteInput() {
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [purpose, setPurpose] = useState<PlanningPurpose>("planning");
+  const isTravel = purpose === "travel";
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedPrompt = prompt.trim();
 
     if (!trimmedPrompt) {
-      setError("请输入目的地或通勤需求。");
+      setError(isTravel ? "请输入旅行目的地或行程需求。" : "请输入目的地或通勤需求。");
       return;
     }
 
@@ -89,6 +93,7 @@ export function CommuteInput() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: trimmedPrompt,
+          ...(isTravel ? { purpose: "travel" } : {}),
           ...(currentLocation ? { currentLocation } : {}),
         }),
       });
@@ -122,6 +127,44 @@ export function CommuteInput() {
   return (
     <form className="w-full space-y-3" onSubmit={onSubmit}>
       <div
+        aria-label="规划类型"
+        className="mx-auto flex w-fit items-center gap-1 rounded-full bg-white/65 p-1 shadow-sm"
+        role="tablist"
+      >
+        <button
+          aria-selected={!isTravel}
+          className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+            !isTravel
+              ? "bg-[#191c1e] text-white"
+              : "text-[#434655] hover:bg-white"
+          }`}
+          onClick={() => {
+            setPurpose("planning");
+            setError("");
+          }}
+          role="tab"
+          type="button"
+        >
+          通勤
+        </button>
+        <button
+          aria-selected={isTravel}
+          className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+            isTravel
+              ? "bg-[#191c1e] text-white"
+              : "text-[#434655] hover:bg-white"
+          }`}
+          onClick={() => {
+            setPurpose("travel");
+            setError("");
+          }}
+          role="tab"
+          type="button"
+        >
+          旅行
+        </button>
+      </div>
+      <div
         className="agent-prompt-source group relative"
         data-agent-transition-source="true"
       >
@@ -133,7 +176,7 @@ export function CommuteInput() {
           aria-label="搜索目的地"
           className="h-16 w-full rounded-full border-0 bg-[#f2f4f6] px-12 pr-20 text-lg text-[#191c1e] shadow-sm outline-none ring-[#2563eb]/20 transition placeholder:text-[#737686] focus:bg-white focus:ring-4"
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder="你要去哪，几点到？"
+          placeholder={isTravel ? "去哪玩几天？如：周末自驾去承德" : "你要去哪，几点到？"}
           value={prompt}
         />
         <button
@@ -144,12 +187,15 @@ export function CommuteInput() {
           {isSubmitting ? (
             <Loader2 aria-label="正在规划" className="size-5 animate-spin" />
           ) : (
-            "规划"
+            isTravel ? "规划旅行" : "规划"
           )}
         </button>
       </div>
       <p className="min-h-5 text-center text-xs font-medium uppercase tracking-[0.05em] text-[#434655]">
-        {error || "输入目的地、到达时间或完整通勤目标"}
+        {error ||
+          (isTravel
+            ? "输入目的地、天数、出行方式或预算偏好"
+            : "输入目的地、到达时间或完整通勤目标")}
       </p>
     </form>
   );

@@ -8,6 +8,7 @@ import type {
   PlannedTripLegInput,
   PlannedTripStopInput,
 } from "@/lib/trips/types";
+import type { TravelPlan } from "@/lib/trips/travel-plan";
 
 const DEFAULT_ROUTE_MINUTES = 30;
 const DEFAULT_BUFFER_COMPONENTS: BufferComponentInput[] = [
@@ -41,6 +42,7 @@ type TripRouteUpdateInput = {
   finalStopName?: string;
   targetArriveAt?: Date;
   status?: string;
+  travelPlan?: TravelPlan;
 };
 
 export type ReplaceTripRouteInput = TripRouteUpdateInput & {
@@ -226,6 +228,9 @@ export async function updateTripSummary(input: TripRouteUpdateInput) {
       finalStopName,
       targetArriveAt: input.targetArriveAt ?? trip.targetArriveAt,
       status: input.status ?? trip.status,
+      travelPlanJson: input.travelPlan
+        ? serialize(input.travelPlan)
+        : undefined,
     },
   });
 }
@@ -414,6 +419,9 @@ export async function replaceTripRoute(input: ReplaceTripRouteInput) {
         finalStopName,
         targetArriveAt: input.targetArriveAt ?? trip.targetArriveAt,
         status: input.status ?? "monitoring",
+        travelPlanJson: input.travelPlan
+          ? serialize(input.travelPlan)
+          : undefined,
       },
     });
   });

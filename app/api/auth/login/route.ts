@@ -31,7 +31,9 @@ export async function POST(request: Request) {
     value: session.token,
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // COOKIE_SECURE override: in HTTP (non-TLS) deployments set COOKIE_SECURE=false
+    // so the browser keeps the session cookie. Default follows NODE_ENV.
+    secure: process.env.COOKIE_SECURE === "true" || (process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false"),
     path: "/",
     expires: session.expiresAt
   });

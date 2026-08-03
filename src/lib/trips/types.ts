@@ -1,3 +1,5 @@
+import type { TravelPlan } from "@/lib/trips/travel-plan";
+
 export type BufferSource =
   | "agent_inference"
   | "user_setting"
@@ -75,4 +77,5 @@ export type CreatePlannedTripInput = {
   finalStopName?: string;
   stops: PlannedTripStopInput[];
   legs?: PlannedTripLegInput[];
+  travelPlan?: TravelPlan;
 };

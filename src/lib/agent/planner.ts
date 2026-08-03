@@ -37,6 +37,11 @@ import type {
   PlannedTripLegInput,
   PlannedTripStopInput,
 } from "@/lib/trips/types";
+import {
+  normalizeTravelPlan,
+  parseTravelPlanJson,
+} from "@/lib/trips/travel-plan";
+import type { AgentPlanningPurpose } from "@/lib/agent/types";
 
 const SESSION_TIMEOUT_MS = 600000;
 const SESSION_MAX_ATTEMPTS = 2;
@@ -78,6 +83,7 @@ type ToolExecutionContext = {
   sessionId: string;
   userId: string;
   prompt: string;
+  purpose: AgentPlanningPurpose;
   tripId?: string | null;
   signal?: AbortSignal;
 };
@@ -243,6 +249,112 @@ const legSchema = objectParameters(
   ]
 );
 
+const travelWeatherSchema = objectParameters(
+  {
+    city: { type: "string" },
+    summary: { type: "string" },
+    advice: { type: "string" },
+    source: { type: "string" },
+  },
+  ["city", "summary", "advice"]
+);
+
+const travelTransportOptionSchema = objectParameters(
+  {
+    summary: { type: "string" },
+    reason: { type: "string" },
+    durationMinutes: { type: "number" },
+    route: { type: "string" },
+  },
+  ["summary", "reason"]
+);
+
+const travelTransportSchema = objectParameters(
+  {
+    recommended: {
+      type: "string",
+      enum: ["driving", "transit", "mixed"],
+    },
+    reason: { type: "string" },
+    driving: travelTransportOptionSchema,
+    transit: travelTransportOptionSchema,
+    localMovement: { type: "string" },
+  },
+  ["recommended", "reason", "driving", "transit"]
+);
+
+const travelAttractionSchema = objectParameters(
+  {
+    name: { type: "string" },
+    category: { type: "string", enum: ["natural", "cultural"] },
+    reason: { type: "string" },
+    address: { type: "string" },
+    lngLat: { type: "string" },
+    day: { type: "number" },
+    stayMinutes: { type: "number" },
+    bestTime: { type: "string" },
+    weatherNote: { type: "string" },
+    notes: { type: "string" },
+  },
+  ["name", "category", "reason"]
+);
+
+const travelLodgingSchema = objectParameters(
+  {
+    name: { type: "string" },
+    area: { type: "string" },
+    reason: { type: "string" },
+    budget: { type: "string" },
+    notes: { type: "string" },
+  },
+  ["name", "area", "reason"]
+);
+
+const travelFoodSchema = objectParameters(
+  {
+    name: { type: "string" },
+    area: { type: "string" },
+    mustTry: { type: "string" },
+    reason: { type: "string" },
+    budget: { type: "string" },
+    notes: { type: "string" },
+  },
+  ["name", "mustTry", "reason"]
+);
+
+const travelPitfallSchema = objectParameters(
+  {
+    title: { type: "string" },
+    detail: { type: "string" },
+    severity: { type: "string", enum: ["high", "medium", "low"] },
+  },
+  ["title", "detail"]
+);
+
+const travelPlanSchema = objectParameters(
+  {
+    destination: { type: "string" },
+    summary: { type: "string" },
+    days: { type: "number" },
+    weather: travelWeatherSchema,
+    transport: travelTransportSchema,
+    attractions: arrayOfItems(travelAttractionSchema),
+    lodging: arrayOfItems(travelLodgingSchema),
+    food: arrayOfItems(travelFoodSchema),
+    pitfalls: arrayOfItems(travelPitfallSchema),
+  },
+  [
+    "destination",
+    "summary",
+    "weather",
+    "transport",
+    "attractions",
+    "lodging",
+    "food",
+    "pitfalls",
+  ]
+);
+
 const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   {
     name: "read_settings",
@@ -280,6 +392,20 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
     name: "get_transit_route",
     description:
       "Query AMap transit route. origin and destination must be lng,lat coordinates; use search_poi to resolve place names first.",
+    parameters: objectParameters(
+      {
+        origin: { type: "string" },
+        destination: { type: "string" },
+        city: { type: "string" },
+        cityd: { type: "string" },
+      },
+      ["origin", "destination"]
+    ),
+  },
+  {
+    name: "get_driving_route",
+    description:
+      "Query AMap driving route for self-drive comparison. origin and destination must be lng,lat coordinates; use search_poi to resolve place names first.",
     parameters: objectParameters(
       {
         origin: { type: "string" },
@@ -330,6 +456,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
         finalStopName: { type: "string" },
         stops: arrayOfItems(stopSchema),
         legs: arrayOfItems(legSchema),
+        travelPlan: travelPlanSchema,
       },
       ["title", "timezone", "stops", "legs"]
     ),
@@ -350,6 +477,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
       finalStopName: { type: "string" },
       targetArriveAt: { type: "string" },
       status: { type: "string" },
+      travelPlan: travelPlanSchema,
     }),
   },
   {
@@ -363,6 +491,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
       targetArriveAt: { type: "string" },
       stops: arrayOfItems(stopSchema),
       legs: arrayOfItems(legSchema),
+      travelPlan: travelPlanSchema,
     }),
   },
   {
@@ -376,6 +505,7 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
       targetArriveAt: { type: "string" },
       stops: arrayOfItems(stopSchema),
       legs: arrayOfItems(legSchema),
+      travelPlan: travelPlanSchema,
     }),
   },
   {
@@ -419,14 +549,27 @@ const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are a personal commute-planning AI. Current dates should be interpreted in Beijing time.
+const COMMUTE_SYSTEM_PROMPT = `You are a personal commute-planning AI. Current dates should be interpreted in Beijing time.
 You must plan, calculate, compare, and decide yourself. The app only exposes tools; it will not hard-code route ranking, destination extraction, or buffer minutes for you.
-Available tools include user settings, memories, all AMap POI/weather/transit/walking/bicycling tools, create_trip, and current-route update tools. You may call tools for as many rounds as needed before timeout. Weather, route results, user preferences, and memories are evidence for your decision, not fixed app rules.
-Before calling get_transit_route, get_walking_route, or get_bicycling_route, provide origin and destination as lng,lat coordinates. Never pass place names directly; call search_poi first and use a returned lngLat value.
+Available tools include user settings, memories, all AMap POI/weather/transit/driving/walking/bicycling tools, create_trip, and current-route update tools. You may call tools for as many rounds as needed before timeout. Weather, route results, user preferences, and memories are evidence for your decision, not fixed app rules.
+Before calling get_transit_route, get_driving_route, get_walking_route, or get_bicycling_route, provide origin and destination as lng,lat coordinates. Never pass place names directly; call search_poi first and use a returned lngLat value.
 When the user does not explicitly say where to start, use the default origin from read_settings. When the user says they are starting from "我现在的位置", "当前位置", or similar, use the current-location context if it is provided.
 You should actively adapt to weather evidence. In 恶劣天气 such as heavy rain, storms, extreme heat, strong wind, or snow, compare options with less exposed walking or bicycling when possible. If you still choose 长距离步行 or bicycling in bad weather, explain why it remains acceptable, and reflect the weather impact in route rationale and bufferComponents with meaningful minutes when extra time is needed.
 Actively capture stable user preferences. When the user says phrases such as 我习惯, 我偏好, 我不喜欢, 以后都, 通常, or similar durable commute habits, call create_memory_candidate with a concise label and structured valueJson so the user can confirm it later.
 Final user-facing replies must be plain text without Markdown formatting, headings, code ticks, or list markers.`;
+
+const TRAVEL_SYSTEM_PROMPT = `You are a personal travel-itinerary planning AI. Current dates should be interpreted in Beijing time.
+Plan a practical, evidence-aware trip rather than a generic list of attractions. Parse the destination, dates, number of days, origin, budget, pace, party, and constraints from the user's request. Ask for missing value-critical details only when the request cannot be safely planned; otherwise make a reasonable choice and state it in the result.
+Use read_settings for the default city, timezone, and origin, and use the current-location context when the user says they are starting from their current position. For every travel plan, call get_weather_reference for the destination city or cities and make the weather summary and action advice explicit. Weather is evidence, not a guarantee; if the API only provides current/reference conditions, say so.
+Before calling get_transit_route, get_driving_route, get_walking_route, or get_bicycling_route, resolve both endpoints to lng,lat coordinates with search_poi. Compare self-drive and public transit whenever the route is meaningfully comparable. Use get_driving_route for self-drive and get_transit_route for public transit, then choose driving, transit, or mixed with a reason. Use walking or bicycling for local last-mile segments when appropriate and adapt to weather.
+Search POIs before naming specific attractions, lodging, or food venues. Recommend both natural and cultural attractions when the destination offers them, and explain the reason for each recommendation, the best visiting time, suggested stay, and any weather note. Search practical lodging areas and local food options; do not invent venue-specific facts when evidence is missing. Add concrete pitfalls covering tickets/reservations, peak periods, parking or transit, weather, and other destination-specific friction when relevant.
+For a normal one-to-three-day request, keep evidence bounded: make one weather call, search at most six representative attraction or practical-place keywords plus one lodging and one food keyword, and call each main driving/transit comparison at most once. Once you have enough evidence for a natural attraction, a cultural attraction, lodging, food, weather, and both transport options, stop searching and immediately call create_trip. Do not search every possible option or repeat an equivalent route call.
+The create_trip call is mandatory. In travel mode it must include a complete travelPlan object with destination, summary, weather, transport.driving, transport.transit, attractions, lodging, food, and pitfalls. Stops and legs must form a chronological itinerary; use stop notes for day/order context and route rationale for transport decisions. When a later message changes travel recommendations, pass an updated travelPlan to update_trip_summary or replace_trip_stops/replace_trip_legs so the visible plan stays consistent.
+Final user-facing replies must be plain text without Markdown formatting, headings, code ticks, or list markers.`;
+
+function getSystemPrompt(purpose: AgentPlanningPurpose) {
+  return purpose === "travel" ? TRAVEL_SYSTEM_PROMPT : COMMUTE_SYSTEM_PROMPT;
+}
 
 function buildCurrentLocationContext(
   currentLocation: StartPlanningSessionInput["currentLocation"]
@@ -447,7 +590,12 @@ function buildCurrentLocationContext(
 }
 
 async function createInitialMessages(
-  session: { id: string; prompt: string; userId: string },
+  session: {
+    id: string;
+    prompt: string;
+    userId: string;
+    purpose: string;
+  },
   attempt: number
 ) {
   const memoryContext = await buildConfirmedMemoryContext(session.userId);
@@ -456,7 +604,10 @@ async function createInitialMessages(
     orderBy: { createdAt: "asc" },
   });
   const messages: AgentChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: getSystemPrompt(session.purpose === "travel" ? "travel" : "planning"),
+    },
     { role: "system", content: memoryContext },
     ...sessionContextMessages.map((message) => ({
       role: "system" as const,
@@ -476,6 +627,7 @@ async function createContinuationMessages(session: {
   prompt: string;
   userId: string;
   tripId: string | null;
+  purpose: string;
 }) {
   const memoryContext = await buildConfirmedMemoryContext(session.userId);
   const persistedMessages = await prisma.agentMessage.findMany({
@@ -484,7 +636,10 @@ async function createContinuationMessages(session: {
   });
 
   const messages: AgentChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: getSystemPrompt(session.purpose === "travel" ? "travel" : "planning"),
+    },
     { role: "system", content: memoryContext },
     {
       role: "system",
@@ -733,6 +888,15 @@ function normalizeCreateTripInput(
   context: ToolExecutionContext,
   settings: PlanningSettings
 ): CreatePlannedTripInput {
+  const travelPlan =
+    args.travelPlan === undefined
+      ? undefined
+      : normalizeTravelPlan(args.travelPlan);
+
+  if (context.purpose === "travel" && !travelPlan) {
+    throw new Error("旅行规划必须提供结构化 travelPlan。");
+  }
+
   return {
     userId: context.userId,
     agentSessionId: context.sessionId,
@@ -743,6 +907,7 @@ function normalizeCreateTripInput(
     finalStopName: readOptionalString(args, "finalStopName"),
     stops: readArray(args, "stops").map(normalizeStop),
     legs: readArray(args, "legs").map(normalizeLeg),
+    travelPlan,
   };
 }
 
@@ -848,6 +1013,10 @@ async function normalizeReplaceRouteInput(
   const legArgs = readOptionalArray(args, "legs");
   const stops = stopArgs ? stopArgs.map(normalizeStop) : current.stops;
   const legs = legArgs ? legArgs.map(normalizeLeg) : current.legs;
+  const travelPlan =
+    args.travelPlan === undefined
+      ? parseTravelPlanJson(current.trip.travelPlanJson)
+      : normalizeTravelPlan(args.travelPlan);
 
   if (!stops.length || !legs.length) {
     throw new Error(
@@ -871,6 +1040,7 @@ async function normalizeReplaceRouteInput(
     status: readOptionalString(args, "status") ?? "monitoring",
     stops,
     legs,
+    travelPlan: travelPlan ?? undefined,
   };
 }
 
@@ -966,6 +1136,7 @@ async function executeToolCall(
 
   if (
     name === "get_transit_route" ||
+    name === "get_driving_route" ||
     name === "get_walking_route" ||
     name === "get_bicycling_route"
   ) {
@@ -982,6 +1153,8 @@ async function executeToolCall(
     const route = (resolvedRequest: typeof request) =>
       name === "get_transit_route"
         ? amap.getTransitRoute(resolvedRequest)
+        : name === "get_driving_route"
+          ? amap.getDrivingRoute(resolvedRequest)
         : name === "get_walking_route"
           ? amap.getWalkingRoute(resolvedRequest)
           : amap.getBicyclingRoute(resolvedRequest);
@@ -1030,6 +1203,10 @@ async function executeToolCall(
       finalStopName: readOptionalString(args, "finalStopName"),
       targetArriveAt: readOptionalDate(args, "targetArriveAt"),
       status: readOptionalString(args, "status"),
+      travelPlan:
+        args.travelPlan === undefined
+          ? undefined
+          : normalizeTravelPlan(args.travelPlan),
     };
     return recordToolCall({
       agentSessionId: context.sessionId,
@@ -1286,17 +1463,20 @@ async function runConversationAttempt(input: {
 
 export async function startPlanningSession({
   currentLocation,
+  purpose,
   userId,
   prompt,
 }: StartPlanningSessionInput) {
   const normalizedPrompt = normalizePrompt(prompt);
   const currentLocationContext = buildCurrentLocationContext(currentLocation);
+  const normalizedPurpose: AgentPlanningPurpose =
+    purpose === "travel" ? "travel" : "planning";
 
   return prisma.agentSession.create({
     data: {
       userId,
       status: "running",
-      purpose: "planning",
+      purpose: normalizedPurpose,
       prompt: normalizedPrompt,
       timeoutMs: SESSION_TIMEOUT_MS,
       messages: {
@@ -1483,6 +1663,7 @@ async function runContinuationAttempt(
     sessionId,
     userId: session.userId,
     prompt: session.prompt,
+    purpose: session.purpose === "travel" ? "travel" : "planning",
     tripId: session.tripId,
     signal,
   };
@@ -1520,6 +1701,7 @@ export async function runPlanningAttempt(
     sessionId,
     userId: session.userId,
     prompt: session.prompt,
+    purpose: session.purpose === "travel" ? "travel" : "planning",
     signal,
   };
   const messages = await createInitialMessages(session, attempt);

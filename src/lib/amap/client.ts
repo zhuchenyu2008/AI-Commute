@@ -83,6 +83,7 @@ const formatAddress = (address: AmapPoi["address"]): string => {
 const formatRouteMode = (mode: RouteMode): string => {
   const labels: Record<RouteMode, string> = {
     bicycling: "骑行",
+    driving: "驾车",
     transit: "公交/地铁",
     walking: "步行",
   };
@@ -316,6 +317,14 @@ export function createRealAmapClient(options: AmapClientOptions): AmapClient {
         city: requestBody.city,
         cityd: requestBody.cityd,
         output: "json"
+      });
+    },
+
+    async getDrivingRoute(requestBody: RouteRequest): Promise<RouteResult> {
+      return route("driving", `${BASE_URL}/direction/driving`, requestBody, {
+        extensions: "all",
+        strategy: "10",
+        output: "json",
       });
     },
 

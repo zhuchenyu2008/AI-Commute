@@ -1,5 +1,13 @@
 import React from "react";
-import { Bike, Building2, Bus, Footprints, MapPin, Train } from "lucide-react";
+import {
+  Bike,
+  Building2,
+  Bus,
+  CarFront,
+  Footprints,
+  MapPin,
+  Train,
+} from "lucide-react";
 
 export type RouteTimelineSegment = {
   id?: string;
@@ -24,6 +32,9 @@ function SegmentIcon({ mode }: { mode: string }) {
   }
   if (normalized.includes("bus") || normalized.includes("transit")) {
     return <Bus aria-hidden="true" className="size-5" />;
+  }
+  if (normalized.includes("car") || normalized.includes("drive") || normalized.includes("驾车") || normalized.includes("自驾")) {
+    return <CarFront aria-hidden="true" className="size-5" />;
   }
   if (normalized.includes("bike") || normalized.includes("cycle")) {
     return <Bike aria-hidden="true" className="size-5" />;
