@@ -1,5 +1,11 @@
 import OpenAI from "openai";
 import type { TravelPlan } from "@/lib/trips/travel-plan";
+import {
+  DEFAULT_PLANNING_MODEL,
+  TRAVEL_PLANNING_MODEL,
+} from "@/lib/agent/model-config";
+
+export { DEFAULT_PLANNING_MODEL, TRAVEL_PLANNING_MODEL } from "@/lib/agent/model-config";
 
 export type AgentChatRole = "system" | "user" | "assistant" | "tool";
 
@@ -38,9 +44,6 @@ export type AgentChatClient = {
 };
 
 type EnvSource = Partial<Record<string, string | undefined>>;
-
-const DEFAULT_MODEL = "gpt-4o-mini";
-export const TRAVEL_PLANNING_MODEL = "deepseek-v4-flash";
 
 function parseToolArguments(value: string | null | undefined) {
   if (!value) return {};
@@ -99,7 +102,7 @@ export function createOpenAiChatClient(
   return {
     async complete(input) {
       const model =
-        input.model?.trim() || env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
+        input.model?.trim() || env.OPENAI_MODEL?.trim() || DEFAULT_PLANNING_MODEL;
       const completion = await client.chat.completions.create(
         {
           model,

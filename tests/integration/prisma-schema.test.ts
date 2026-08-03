@@ -19,6 +19,10 @@ describe("Prisma schema", () => {
     "prisma/migrations/20260803110000_travel_plan/migration.sql",
     "utf8"
   );
+  const userModelMigration = readFileSync(
+    "prisma/migrations/20260803130000_user_model_setting/migration.sql",
+    "utf8"
+  );
 
   it("models the Agent-centered multi-stop trip graph", () => {
     for (const model of [
@@ -66,6 +70,13 @@ describe("Prisma schema", () => {
     expect(schema).toContain("@@unique([candidateId, order])");
     expect(schema).toContain("@@index([legId, order])");
     expect(schema).not.toContain("@@unique([legId, order])");
+  });
+
+  it("stores an optional per-user planning model override", () => {
+    expect(schema).toContain("model               String?");
+    expect(userModelMigration).toContain(
+      'ALTER TABLE "UserSettings" ADD COLUMN "model" TEXT;'
+    );
   });
 
   it("allows user settings to omit a default origin", () => {

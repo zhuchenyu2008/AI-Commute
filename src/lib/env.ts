@@ -1,7 +1,10 @@
+import { DEFAULT_PLANNING_MODEL } from "@/lib/agent/model-config";
+
 export type AppEnv = {
   databaseUrl: string;
   defaultCity: string;
   defaultTimezone: string;
+  openAiModel: string;
   hasAmapKey: boolean;
   hasOpenAiKey: boolean;
   hasTelegramConfig: boolean;
@@ -18,6 +21,7 @@ export function readEnv(env: EnvInput = process.env): AppEnv {
     databaseUrl: env.DATABASE_URL ?? "file:./dev.db",
     defaultCity: env.DEFAULT_CITY ?? "宁波",
     defaultTimezone: env.DEFAULT_TIMEZONE ?? "Asia/Shanghai",
+    openAiModel: env.OPENAI_MODEL?.trim() || DEFAULT_PLANNING_MODEL,
     hasAmapKey: hasValue(env.AMAP_API_KEY),
     hasOpenAiKey: hasValue(env.OPENAI_API_KEY),
     hasTelegramConfig: hasValue(env.TELEGRAM_BOT_TOKEN),

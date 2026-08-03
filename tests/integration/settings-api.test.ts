@@ -21,6 +21,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => {
   };
 });
 
+
 vi.mock("@/lib/amap", () => ({
   createAmapClient: createAmapClientMock
 }));
@@ -107,6 +108,7 @@ describe("settings API", () => {
     expect(body.settings.originLngLat).toBe("");
     expect(body.settings.routePreference).toBe("balanced");
     expect(body.settings.routeChangeThresholdMinutes).toBe(3);
+    expect(body.settings.model).toBeTruthy();
   });
 
   it("returns blank origin fields when the user has not selected a default origin", async () => {
@@ -294,6 +296,7 @@ describe("settings API", () => {
           originName: "家",
           originLngLat: "121.5230315924,29.8652491273",
           routePreference: "fastest",
+          model: "deepseek-v4-flash",
           emailRecipient: "user@example.com",
           routeChangeThresholdMinutes: 6
         })
@@ -303,6 +306,7 @@ describe("settings API", () => {
 
     expect(response.status).toBe(200);
     expect(body.settings.routePreference).toBe("fastest");
+    expect(body.settings.model).toBe("deepseek-v4-flash");
     expect(body.settings.emailRecipient).toBe("user@example.com");
     expect(body.settings.routeChangeThresholdMinutes).toBe(6);
   });
@@ -397,6 +401,7 @@ describe("settings API", () => {
     ["empty default city", { defaultCity: "" }, "默认城市不能为空"],
     ["unsupported timezone", { timezone: "Mars/Base" }, "不支持该时区"],
     ["unsupported route preference", { routePreference: "teleport" }, "不支持该通勤方式倾向"],
+    ["unsupported AI model", { model: "unsupported-model" }, "不支持该 AI 模型"],
     ["origin name without lngLat", { originName: "家", originLngLat: "" }, "默认出发点必须从候选地点中选择"],
     ["lngLat without origin name", { originName: "", originLngLat: "121.1,29.1" }, "默认出发点必须从候选地点中选择"],
     ["invalid lngLat format", { originName: "家", originLngLat: "abc" }, "默认出发点坐标无效"],
@@ -841,4 +846,3 @@ describe("logout API", () => {
     expect(remaining).toBe(0);
   });
 });
-

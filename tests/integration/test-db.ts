@@ -140,6 +140,19 @@ async function ensureRouteChangeThresholdMigration() {
   }
 }
 
+async function ensureUserModelMigration() {
+  const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    "PRAGMA table_info('UserSettings')"
+  );
+  const hasModel = columns.some((column) => column.name === "model");
+
+  if (!hasModel) {
+    await executeMigration(
+      "prisma/migrations/20260803130000_user_model_setting/migration.sql"
+    );
+  }
+}
+
 async function ensureTripShareMigration() {
   const hasTripShare = await sqliteObjectExists("table", "TripShare");
 
@@ -220,6 +233,7 @@ export async function ensureTestDatabase() {
       await ensureOptionalOriginMigration();
       await ensureTelegramMigrations();
       await ensureRouteChangeThresholdMigration();
+      await ensureUserModelMigration();
       await ensureTripShareMigration();
       await ensureTravelPlanMigration();
     }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { isSupportedPlanningModel } from "@/lib/agent/model-config";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { readEnv } from "@/lib/env";
@@ -19,6 +20,7 @@ function getSettingsDefaults() {
   return {
     defaultCity: env.defaultCity,
     timezone: env.defaultTimezone,
+    model: env.openAiModel,
     originName: null,
     originLngLat: null,
     routePreference: "balanced",
@@ -73,6 +75,7 @@ function isValidLngLat(value: string) {
 function validateSettings(data: {
   defaultCity: string;
   timezone: string;
+  model: string;
   originName: string | null;
   originLngLat: string | null;
   routePreference: string;
@@ -84,6 +87,9 @@ function validateSettings(data: {
 
   if (!data.defaultCity) errors.push("默认城市不能为空");
   if (!TIMEZONES.has(data.timezone)) errors.push("不支持该时区");
+  if (!isSupportedPlanningModel(data.model)) {
+    errors.push("不支持该 AI 模型");
+  }
   if (Boolean(data.originName) !== Boolean(data.originLngLat)) {
     errors.push("默认出发点必须从候选地点中选择");
   }
@@ -130,11 +136,13 @@ export async function GET() {
   const settings = await prisma.userSettings.findUnique({
     where: { userId: user.id }
   });
-  const values = settings ?? getSettingsDefaults();
+  const defaults = getSettingsDefaults();
+  const values = settings ?? defaults;
 
   return NextResponse.json({
     settings: {
       ...values,
+      model: values.model ?? defaults.model,
       originName: values.originName ?? "",
       originLngLat: values.originLngLat ?? "",
     },
@@ -155,6 +163,7 @@ export async function PUT(request: Request) {
   const data = {
     defaultCity: readRequiredString(body, "defaultCity", defaults.defaultCity),
     timezone: readRequiredString(body, "timezone", defaults.timezone),
+    model: readRequiredString(body, "model", defaults.model),
     originName,
     originLngLat,
     routePreference: readRequiredString(body, "routePreference", defaults.routePreference),

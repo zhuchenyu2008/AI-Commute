@@ -10,6 +10,7 @@ describe("readEnv", () => {
     });
 
     expect(env.databaseUrl).toBe("file:./test.db");
+    expect(env.openAiModel).toBe("gpt-4o-mini");
     expect(env.hasAmapKey).toBe(true);
     expect(env.hasOpenAiKey).toBe(true);
     expect(JSON.stringify(env)).not.toContain("secret-amap");
@@ -21,6 +22,12 @@ describe("readEnv", () => {
 
     expect(env.defaultCity).toBe("宁波");
     expect(env.defaultTimezone).toBe("Asia/Shanghai");
+  });
+
+  it("reads the non-secret model default from the environment", () => {
+    expect(readEnv({ OPENAI_MODEL: "deepseek-v4-pro" }).openAiModel).toBe(
+      "deepseek-v4-pro"
+    );
   });
 
   it("does not expose default origin configuration", () => {

@@ -2,10 +2,16 @@
 
 import React, { FormEvent, KeyboardEvent, useState } from "react";
 import { ChevronDown, Loader2, Mail, Send } from "lucide-react";
+import {
+  DEFAULT_PLANNING_MODEL,
+  PLANNING_MODEL_OPTIONS,
+  TRAVEL_PLANNING_MODEL,
+} from "@/lib/agent/model-config";
 
 type SettingsValues = {
   defaultCity: string;
   timezone: string;
+  model?: string;
   originName: string;
   originLngLat: string;
   routePreference: string;
@@ -284,6 +290,26 @@ export function SettingsForm({ values }: { values: SettingsValues }) {
             name="timezone"
             options={timezoneOptions}
           />
+        </section>
+
+        <section className="grid gap-2 py-4 md:grid-cols-[160px_1fr] md:items-start">
+          <label
+            className="text-sm font-medium text-on-surface-variant"
+            htmlFor="model"
+          >
+            通勤规划模型
+          </label>
+          <div className="space-y-2">
+            <SelectField
+              defaultValue={values.model ?? DEFAULT_PLANNING_MODEL}
+              id="model"
+              name="model"
+              options={PLANNING_MODEL_OPTIONS}
+            />
+            <p className="text-xs leading-5 text-on-surface-variant">
+              日常通勤规划使用此模型；旅行规划按当前要求固定使用 {TRAVEL_PLANNING_MODEL}。API Key 和 Base URL 仍由环境变量管理。
+            </p>
+          </div>
         </section>
 
         <section className="grid gap-3 py-4 md:grid-cols-[160px_1fr] md:items-start">

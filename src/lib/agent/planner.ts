@@ -78,6 +78,7 @@ export class AgentSessionNotFoundError extends Error {
 type PlanningSettings = {
   defaultCity: string;
   timezone: string;
+  model: string;
   originName: string;
   originLngLat: string;
   routePreference: string;
@@ -103,6 +104,7 @@ const fallbackSettings = (): PlanningSettings => {
   return {
     defaultCity: env.defaultCity,
     timezone: env.defaultTimezone,
+    model: env.openAiModel,
     originName: "",
     originLngLat: "",
     routePreference: "balanced",
@@ -112,6 +114,7 @@ const fallbackSettings = (): PlanningSettings => {
 function normalizePlanningSettings(settings: {
   defaultCity: string;
   timezone: string;
+  model: string | null;
   originName: string | null;
   originLngLat: string | null;
   routePreference: string;
@@ -119,6 +122,7 @@ function normalizePlanningSettings(settings: {
   return {
     defaultCity: settings.defaultCity,
     timezone: settings.timezone,
+    model: settings.model ?? fallbackSettings().model,
     originName: settings.originName ?? "",
     originLngLat: settings.originLngLat ?? "",
     routePreference: settings.routePreference,
@@ -400,7 +404,8 @@ const travelPlanSchema = objectParameters(
 const TOOL_DEFINITIONS: AgentChatToolDefinition[] = [
   {
     name: "read_settings",
-    description: "Read the user's city, timezone, default origin, and route preference.",
+    description:
+      "Read the user's city, timezone, selected planning model, default origin, and route preference.",
     parameters: objectParameters({}),
   },
   {
@@ -1486,7 +1491,7 @@ async function runConversationAttempt(input: {
       model:
         input.context.purpose === "travel"
           ? TRAVEL_PLANNING_MODEL
-          : undefined,
+          : input.settings.model,
       signal: input.signal,
     });
     const assistantMessage = completion.message;

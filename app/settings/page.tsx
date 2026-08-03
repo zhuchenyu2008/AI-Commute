@@ -24,6 +24,7 @@ export default async function SettingsPage() {
   const values = {
     defaultCity: settings?.defaultCity ?? env.defaultCity,
     timezone: settings?.timezone ?? env.defaultTimezone,
+    model: settings?.model ?? env.openAiModel,
     originName: settings?.originName ?? "",
     originLngLat: settings?.originLngLat ?? "",
     routePreference: settings?.routePreference ?? "balanced",

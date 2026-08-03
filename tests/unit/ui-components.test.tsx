@@ -1445,6 +1445,7 @@ describe("sample-aligned UI components", () => {
     for (const selector of [
       "#defaultCity",
       "#timezone",
+      "#model",
       'input[type="search"]',
       "#routeChangeThresholdMinutes",
       "#telegramChatId",
@@ -1474,6 +1475,9 @@ describe("sample-aligned UI components", () => {
     expect(html).toContain("默认出发点");
     expect(html).toContain("北京时间（Asia/Shanghai）");
     expect(html).toContain("通勤方式倾向");
+    expect(html).toContain("通勤规划模型");
+    expect(html).toContain("deepseek-v4-flash");
+    expect(html).toContain('name="model"');
     expect(html).toContain('name="timezone"');
     expect(html).toContain('name="routePreference"');
     expect(html).toContain('type="hidden"');

@@ -661,6 +661,40 @@ describe("agent planning sessions", () => {
     expect(createTripParameters).toContain("travelPlan");
   });
 
+  it("uses the user's selected model for commute planning", async () => {
+    const user = await createUserWithSettings("agent-selected-model", {
+      settings: {
+        create: {
+          defaultCity: "Ningbo",
+          timezone: "Asia/Shanghai",
+          model: "deepseek-v4-flash",
+          originName: "Home",
+          originLngLat: "121.1,29.1",
+          routePreference: "balanced",
+        },
+      },
+    });
+    const session = await startPlanningSession({
+      userId: user.id,
+      prompt: "Plan my commute to the office.",
+    });
+    let requestedModel: string | undefined;
+    const chatClient: AgentChatClient = {
+      async complete({ model }) {
+        requestedModel = model;
+        throw new Error("stop after selected model capture");
+      },
+    };
+
+    const result = await runPlanningSession(session.id, {
+      amapClient,
+      chatClient,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(requestedModel).toBe("deepseek-v4-flash");
+  });
+
   it("lets the AI choose AMap tools, route mode, and buffer details", async () => {
     const user = await createUserWithSettings("agent-ai-led");
     const session = await startPlanningSession({

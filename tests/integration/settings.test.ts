@@ -18,6 +18,7 @@ describe("settings persistence", () => {
           create: {
             defaultCity: "宁波",
             timezone: "Asia/Shanghai",
+            model: "deepseek-v4-flash",
             originName: "家",
             originLngLat: "121.5230315924,29.8652491273",
             routePreference: "balanced",
@@ -31,6 +32,7 @@ describe("settings persistence", () => {
 
     expect(user.settings?.defaultCity).toBe("宁波");
     expect(user.settings?.timezone).toBe("Asia/Shanghai");
+    expect(user.settings?.model).toBe("deepseek-v4-flash");
     expect(user.settings?.originLngLat).toContain(",");
   });
 
