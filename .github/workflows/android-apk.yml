@@ -14,7 +14,7 @@ on:
       - ".github/workflows/android-apk.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -42,16 +42,45 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build debug APK
+      - name: Build debug APK and capture log
+        id: build
         working-directory: android
-        run: gradle --no-daemon :app:assembleDebug
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon :app:assembleDebug 2>&1 | tee ../android-build.log
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Copy APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk AI-Commute-Android.apk
-
-      - name: Upload APK
+      - name: Upload APK artifact
+        if: steps.build.outputs.status == '0'
         uses: actions/upload-artifact@v4
         with:
           name: AI-Commute-Android-APK
-          path: AI-Commute-Android.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish build result back to branch
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/android-native-client'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          if [ -f android-build.log ]; then
+            cp android-build.log artifacts/android-build.log
+          fi
+          if [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/AI-Commute-Android.apk
+            echo success > artifacts/android-build-status.txt
+          else
+            echo failed > artifacts/android-build-status.txt
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts
+          git commit -m "chore: publish Android build result [skip ci]" || exit 0
+          git push
+
+      - name: Fail workflow when Gradle failed
+        if: steps.build.outputs.status != '0'
+        run: exit 1
