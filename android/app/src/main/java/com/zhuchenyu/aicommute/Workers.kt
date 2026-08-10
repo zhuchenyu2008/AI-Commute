@@ -26,21 +26,30 @@ import kotlin.math.abs
 import kotlin.math.max
 
 object NotificationHelper {
-    private const val CHANNEL = "ai_commute"
+    private const val CHANNEL = "ai_commute_v2"
     private const val CHANNEL_NAME = "AI Commute 行程提醒"
+    private val VIBRATION_PATTERN = longArrayOf(0, 70, 65, 120)
 
     fun ensureChannel(context: Context) {
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH)
-            )
+            val channel = NotificationChannel(
+                CHANNEL,
+                CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "出发提醒与路线重大变化"
+                enableVibration(true)
+                vibrationPattern = VIBRATION_PATTERN
+            }
+            manager.createNotificationChannel(channel)
         }
     }
 
     fun notify(context: Context, id: Int, title: String, text: String) {
         ensureChannel(context)
-        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+        if (
+            android.os.Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) return
@@ -51,6 +60,7 @@ object NotificationHelper {
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVibrate(VIBRATION_PATTERN)
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
