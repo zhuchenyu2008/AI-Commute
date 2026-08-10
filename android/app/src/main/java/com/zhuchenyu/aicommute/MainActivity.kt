@@ -14,7 +14,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AICommuteTheme {
                 val vm: AppViewModel = viewModel()
-                AICommuteApp(vm)
+                PremiumAICommuteApp(vm)
             }
         }
     }
