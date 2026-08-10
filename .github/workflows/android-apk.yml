@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
       - android-native-client
     paths:
       - "android/**"
@@ -58,28 +57,28 @@ jobs:
         if: steps.build.outputs.status == '0'
         uses: actions/upload-artifact@v4
         with:
-          name: AI-Commute-Android-APK
+          name: AI-Commute-Android-v1.1.0
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Publish build result back to current branch
+      - name: Publish build result back to Android branch
         if: always() && github.event_name == 'push'
         shell: bash
         run: |
           mkdir -p artifacts
           if [ -f android-build.log ]; then
-            cp android-build.log artifacts/android-build.log
+            cp android-build.log artifacts/android-build-v1.1.0.log
           fi
           if [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/AI-Commute-Android.apk
-            echo success > artifacts/android-build-status.txt
+            cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/AI-Commute-Android-v1.1.0.apk
+            echo success > artifacts/android-build-v1.1.0-status.txt
           else
-            echo failed > artifacts/android-build-status.txt
+            echo failed > artifacts/android-build-v1.1.0-status.txt
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts
-          git commit -m "chore: publish Android build result [skip ci]" || exit 0
+          git commit -m "chore: publish Android v1.1.0 build [skip ci]" || exit 0
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Fail workflow when Gradle failed
