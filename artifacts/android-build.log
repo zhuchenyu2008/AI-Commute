@@ -16,7 +16,6 @@ Daemon will be stopped at the end of the build
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
@@ -24,22 +23,19 @@ Daemon will be stopped at the end of the build
 > Task :app:mergeDebugAssets
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
-> Task :app:processDebugResources
+> Task :app:processDebugManifestForPackage
 > Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugJniLibFolders
 > Task :app:mergeLibDexDebug
+> Task :app:processDebugResources
 > Task :app:mergeDebugNativeLibs
-> Task :app:validateSigningDebug
-> Task :app:writeDebugAppMetadata
-> Task :app:writeDebugSigningConfigVersions
 
 > Task :app:stripDebugDebugSymbols
 Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so.
 
-> Task :app:kaptGenerateStubsDebugKotlin
-e: The daemon has terminated unexpectedly on startup attempt #1 with error code: 0. The daemon process output:
-    1. Kotlin compile daemon is ready
-
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
 > Task :app:mergeExtDexDebug
 
 > Task :app:kaptGenerateStubsDebugKotlin
@@ -47,20 +43,23 @@ w: Kapt currently doesn't support language version 2.0+. Falling back to 1.9.
 
 > Task :app:kaptDebugKotlin
 
-> Task :app:compileDebugKotlin
-w: file:///home/runner/work/AI-Commute/AI-Commute/android/app/src/main/java/com/zhuchenyu/aicommute/Screens.kt:278:44 'val Icons.Filled.Send: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Send.
-w: file:///home/runner/work/AI-Commute/AI-Commute/android/app/src/main/java/com/zhuchenyu/aicommute/Screens.kt:480:40 'val Icons.Filled.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack.
+> Task :app:compileDebugKotlin FAILED
+e: file:///home/runner/work/AI-Commute/AI-Commute/android/app/src/main/java/com/zhuchenyu/aicommute/PremiumScreens.kt:29:43 Cannot access 'val RowColumnParentData?.weight: Float': it is internal in file.
+e: file:///home/runner/work/AI-Commute/AI-Commute/android/app/src/main/java/com/zhuchenyu/aicommute/PremiumScreens.kt:1052:47 Unresolved reference 'navigationBars'.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786339414638.json
 
-> Task :app:compileDebugJavaWithJavac
-> Task :app:dexBuilderDebug
-> Task :app:mergeDebugGlobalSynthetics
-> Task :app:processDebugJavaRes
-> Task :app:mergeProjectDexDebug
-> Task :app:mergeDebugJavaResource
-> Task :app:packageDebug
-> Task :app:createDebugApkListingFileRedirect
-> Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786339181740.json
+FAILURE: Build failed with an exception.
 
-BUILD SUCCESSFUL in 54s
-39 actionable tasks: 39 executed
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 35s
+31 actionable tasks: 31 executed
