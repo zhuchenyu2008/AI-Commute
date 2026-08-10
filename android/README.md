@@ -52,6 +52,8 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 `.github/workflows/android-apk.yml` 会在 Android 分支/相关文件变化时构建可安装 APK，并上传名为 `AI-Commute-Android-APK` 的 artifact。
 
+当前开发分支：`android-native-client`。
+
 ## 无后端模式的限制
 
 - 公共只读 Web 分享链接改为本地分享图片/文本/二维码。
