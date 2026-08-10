@@ -16,12 +16,12 @@ Daemon will be stopped at the end of the build
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
-> Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
+> Task :app:javaPreCompileDebug
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
+> Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
 > Task :app:processDebugResources
@@ -31,11 +31,11 @@ Daemon will be stopped at the end of the build
 > Task :app:mergeDebugNativeLibs
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
-> Task :app:writeDebugSigningConfigVersions
 
 > Task :app:stripDebugDebugSymbols
 Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so.
 
+> Task :app:writeDebugSigningConfigVersions
 > Task :app:mergeExtDexDebug
 
 > Task :app:kaptGenerateStubsDebugKotlin
@@ -43,12 +43,9 @@ w: Kapt currently doesn't support language version 2.0+. Falling back to 1.9.
 
 > Task :app:kaptDebugKotlin
 
-> Task :app:compileDebugKotlin
-e: file:///home/runner/work/AI-Commute/AI-Commute/android/app/src/main/java/com/zhuchenyu/aicommute/PremiumScreens.kt:29:43 Cannot access 'val RowColumnParentData?.weight: Float': it is internal in file.
-e: file:///home/runner/work/AI-Commute/AI-Commute/android/app/src/main/java/com/zhuchenyu/aicommute/PremiumScreens.kt:1052:47 Unresolved reference 'navigationBars'.
-
 > Task :app:compileDebugKotlin FAILED
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786346193589.json
+e: file:///home/runner/work/AI-Commute/AI-Commute/android/app/src/main/java/com/zhuchenyu/aicommute/MainActivity.kt:17:17 Unresolved reference 'PremiumAICommuteApp'.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786346403704.json
 
 FAILURE: Build failed with an exception.
 
@@ -63,5 +60,5 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 48s
+BUILD FAILED in 47s
 31 actionable tasks: 31 executed
